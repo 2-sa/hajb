@@ -1,0 +1,8 @@
+{
+  "extName": { "message": "One-Click Block" },
+  "extDescription": { "message": "Professional tool to block or mute annoying accounts on Twitter (X) with a single click" },
+  "actionTypeLabel": { "message": "Default Action" },
+  "blockAction": { "message": "Block" },
+  "muteAction": { "message": "Mute" },
+  "languageLabel": { "message": "Twitter Language" }
+}

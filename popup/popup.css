@@ -1,0 +1,118 @@
+body {
+  width: 320px;
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background: linear-gradient(135deg, #0f1419 0%, #15202b 100%);
+  color: #e7e9ea;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+
+.glass-panel {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  padding: 20px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(90deg, rgba(29,155,240,0.1) 0%, rgba(29,155,240,0) 100%);
+}
+
+.icon-glow {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #1d9bf0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 15px rgba(29, 155, 240, 0.5);
+  color: white;
+}
+
+.icon-glow svg {
+  fill: currentColor;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  background: linear-gradient(90deg, #fff, #1d9bf0);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.settings {
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.setting-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setting-item label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #8b98a5;
+  letter-spacing: 0.5px;
+}
+
+.select-wrapper {
+  position: relative;
+}
+
+.select-wrapper::after {
+  content: '▼';
+  font-size: 10px;
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #8b98a5;
+  pointer-events: none;
+}
+
+select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.2);
+  color: #e7e9ea;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  appearance: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+select:hover, select:focus {
+  border-color: #1d9bf0;
+  box-shadow: 0 0 0 1px #1d9bf0;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+select option {
+  background: #15202b;
+  color: #e7e9ea;
+}

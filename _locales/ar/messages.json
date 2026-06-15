@@ -1,0 +1,8 @@
+{
+  "extName": { "message": "إضافة الحظر السريع" },
+  "extDescription": { "message": "أداة احترافية لحظر وكتم الحسابات المزعجة في تويتر (إكس) بنقرة زر واحدة" },
+  "actionTypeLabel": { "message": "الإجراء الافتراضي" },
+  "blockAction": { "message": "حظر" },
+  "muteAction": { "message": "كتم" },
+  "languageLabel": { "message": "لغة تويتر" }
+}

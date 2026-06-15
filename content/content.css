@@ -1,0 +1,18 @@
+/* FIX 2: CSS styling for hover effects instead of JavaScript */
+.ocb-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34.75px;
+  height: 34.75px;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+  margin: 0 4px;
+  color: rgb(113, 118, 123);
+}
+
+.ocb-action-btn:hover {
+  background-color: rgba(244, 33, 46, 0.1);
+  color: rgb(244, 33, 46);
+}

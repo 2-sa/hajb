@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>One-Click Block/Mute</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="glass-panel">
+    <div class="header">
+      <div class="icon-glow">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8 0-1.85.63-3.55 1.69-4.9L16.9 18.31C15.55 19.37 13.85 20 12 20zm6.31-3.1L7.1 5.69C8.45 4.63 10.15 4 12 4c4.42 0 8 3.58 8 8 0 1.85-.63 3.55-1.69 4.9z"></path>
+        </svg>
+      </div>
+      <h1 data-i18n="extName">إضافة الحظر السريع</h1>
+    </div>
+    
+    <div class="settings">
+      <div class="setting-item">
+        <label for="actionType" data-i18n="actionTypeLabel">الإجراء الافتراضي:</label>
+        <div class="select-wrapper">
+          <select id="actionType">
+            <option value="block" data-i18n="blockAction">حظر</option>
+            <option value="mute" data-i18n="muteAction">كتم</option>
+          </select>
+        </div>
+      </div>
+      
+      <div class="setting-item">
+        <label for="language" data-i18n="languageLabel">لغة تويتر:</label>
+        <div class="select-wrapper">
+          <select id="language">
+            <option value="ar">العربية</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
