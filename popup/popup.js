@@ -1,30 +1,25 @@
-document.addEventListener('DOMContentLoaded', async () => {
-  // Translate UI
-  document.querySelectorAll('[data-i18n]').forEach(el => {
-    const message = chrome.i18n.getMessage(el.getAttribute('data-i18n'));
-    if (message) el.textContent = message;
+document.addEventListener('DOMContentLoaded', () => {
+  const requestedLanguage = (chrome.i18n.getUILanguage?.() || 'ar').split('-')[0].toLowerCase();
+  const uiLanguage = requestedLanguage === 'en' ? 'en' : 'ar';
+  document.documentElement.lang = uiLanguage;
+  document.documentElement.dir = uiLanguage === 'ar' ? 'rtl' : 'ltr';
+
+  document.querySelectorAll('[data-i18n]').forEach((element) => {
+    const message = chrome.i18n.getMessage(element.getAttribute('data-i18n'));
+    if (message) element.textContent = message;
   });
 
-  const actionTypeSelect = document.getElementById('actionType');
-  const languageSelect = document.getElementById('language');
+  const actionInputs = [...document.querySelectorAll('input[name="actionType"]')];
 
-  // Load Settings
-  chrome.storage.local.get({
-    actionType: 'block',
-    language: 'ar'
-  }, (data) => {
-    actionTypeSelect.value = data.actionType;
-    languageSelect.value = data.language;
+  chrome.storage.local.get({ actionType: 'block' }, (data) => {
+    const actionType = data.actionType === 'mute' ? 'mute' : 'block';
+    const selectedInput = actionInputs.find((input) => input.value === actionType);
+    if (selectedInput) selectedInput.checked = true;
   });
 
-  // Save settings on change
-  const saveSettings = () => {
-    chrome.storage.local.set({
-      actionType: actionTypeSelect.value,
-      language: languageSelect.value
+  actionInputs.forEach((input) => {
+    input.addEventListener('change', () => {
+      if (input.checked) chrome.storage.local.set({ actionType: input.value });
     });
-  };
-
-  actionTypeSelect.addEventListener('change', saveSettings);
-  languageSelect.addEventListener('change', saveSettings);
+  });
 });

@@ -1,0 +1,13 @@
+{
+  "name": "hajb-browser-extension",
+  "version": "3.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test --test-isolation=none test/*.test.js",
+    "check": "node --check content/content.js && node --check popup/popup.js && node scripts/validate-extension.mjs"
+  }
+}

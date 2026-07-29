@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extName__",
-  "version": "2.0",
+  "short_name": "__MSG_extShortName__",
+  "version": "3.0.0",
   "description": "__MSG_extDescription__",
+  "homepage_url": "https://github.com/2-sa/OneClickBlock",
   "default_locale": "ar",
   "permissions": ["storage"],
-  "host_permissions": ["*://*.twitter.com/*", "*://*.x.com/*"],
   "content_scripts": [
     {
       "matches": ["*://*.twitter.com/*", "*://*.x.com/*"],
@@ -22,6 +23,7 @@
     "128": "icons/icon128.png"
   },
   "action": {
+    "default_title": "__MSG_extName__",
     "default_popup": "popup/popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
@@ -31,8 +33,11 @@
   },
   "browser_specific_settings": {
     "gecko": {
-      "id": "oneclickblock@yourdomain.com",
-      "strict_min_version": "109.0"
+      "id": "hajb@2-sa.github.io",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
     }
   }
 }

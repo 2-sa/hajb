@@ -1,8 +1,13 @@
 {
-  "extName": { "message": "One-Click Block" },
-  "extDescription": { "message": "Professional tool to block or mute annoying accounts on Twitter (X) with a single click" },
-  "actionTypeLabel": { "message": "Default Action" },
+  "extName": { "message": "HAJB" },
+  "extShortName": { "message": "HAJB" },
+  "extDescription": { "message": "Take control of your timeline: block or mute X accounts in one tap, locally and without tracking." },
+  "brandTagline": { "message": "Your timeline. Your call." },
+  "modeEyebrow": { "message": "One-tap mode" },
+  "actionTypeLabel": { "message": "What should one tap do?" },
   "blockAction": { "message": "Block" },
   "muteAction": { "message": "Mute" },
-  "languageLabel": { "message": "Twitter Language" }
+  "privacyNote": { "message": "Local only • No tracking" },
+  "blockButtonLabel": { "message": "Block account with one tap" },
+  "muteButtonLabel": { "message": "Mute account with one tap" }
 }

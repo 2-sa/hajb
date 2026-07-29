@@ -1,8 +1,13 @@
 {
-  "extName": { "message": "إضافة الحظر السريع" },
-  "extDescription": { "message": "أداة احترافية لحظر وكتم الحسابات المزعجة في تويتر (إكس) بنقرة زر واحدة" },
-  "actionTypeLabel": { "message": "الإجراء الافتراضي" },
+  "extName": { "message": "HAJB — حَجْب" },
+  "extShortName": { "message": "HAJB" },
+  "extDescription": { "message": "تحكّم سريع في خطّك الزمني: احظر أو اكتم حسابات X بنقرة واحدة، محليًا ومن دون تتبع." },
+  "brandTagline": { "message": "خطّك الزمني، بقرارك." },
+  "modeEyebrow": { "message": "وضع النقرة الواحدة" },
+  "actionTypeLabel": { "message": "ماذا تنفّذ النقرة؟" },
   "blockAction": { "message": "حظر" },
   "muteAction": { "message": "كتم" },
-  "languageLabel": { "message": "لغة تويتر" }
+  "privacyNote": { "message": "يعمل محليًا • بلا تتبع" },
+  "blockButtonLabel": { "message": "حظر الحساب بنقرة واحدة" },
+  "muteButtonLabel": { "message": "كتم الحساب بنقرة واحدة" }
 }
