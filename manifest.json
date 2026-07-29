@@ -4,7 +4,7 @@
   "short_name": "__MSG_extShortName__",
   "version": "3.0.0",
   "description": "__MSG_extDescription__",
-  "homepage_url": "https://github.com/2-sa/OneClickBlock",
+  "homepage_url": "https://github.com/2-sa/hajb",
   "default_locale": "ar",
   "permissions": ["storage"],
   "content_scripts": [
