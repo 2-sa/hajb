@@ -1,9 +1,53 @@
-// OCB Content Script (Bundled Native) - Enterprise Level
+// HAJB Content Script
+
+const ACTION_PRESENTATION = Object.freeze({
+  block: {
+    labels: ['block', 'حظر'],
+    messageKey: 'blockButtonLabel',
+    svgPath: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8 0-1.85.63-3.55 1.69-4.9L16.9 18.31C15.55 19.37 13.85 20 12 20zm6.31-3.1L7.1 5.69C8.45 4.63 10.15 4 12 4c4.42 0 8 3.58 8 8 0 1.85-.63 3.55-1.69 4.9z'
+  },
+  mute: {
+    labels: ['mute', 'كتم'],
+    messageKey: 'muteButtonLabel',
+    svgPath: 'M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zM9.5 9.5h5v2h-5v-2z'
+  }
+});
+
+const normalizeActionType = (actionType) => actionType === 'mute' ? 'mute' : 'block';
+
+const matchesActionText = (textContent, actionType) => {
+  const normalizedText = textContent
+    .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/gi, '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLocaleLowerCase();
+
+  return ACTION_PRESENTATION[normalizeActionType(actionType)].labels.some((label) => (
+    normalizedText === label || normalizedText.startsWith(`${label} `) || normalizedText.startsWith(`${label}@`)
+  ));
+};
+
+const applyActionPresentation = (button, actionType) => {
+  const actionTypeValue = normalizeActionType(actionType);
+  const presentation = ACTION_PRESENTATION[actionTypeValue];
+  const label = chrome.i18n.getMessage(presentation.messageKey) || chrome.i18n.getMessage('extName') || 'HAJB';
+
+  button.setAttribute('aria-label', label);
+  button.dataset.actionType = actionTypeValue;
+  button.title = label;
+  button.innerHTML = `<svg viewBox="0 0 24 24" width="18.75" height="18.75" fill="currentColor" aria-hidden="true"><path d="${presentation.svgPath}"></path></svg>`;
+};
+
+const updateInjectedButtons = (actionType) => {
+  document.querySelectorAll('.hajb-action-btn').forEach((button) => {
+    applyActionPresentation(button, actionType);
+  });
+};
 
 // 1. Logger
 const Logger = {
-  info: (msg, ...args) => console.log(`[OCB] 🛡️ ${msg}`, ...args),
-  error: (msg, ...args) => console.error(`[OCB] ❌ ${msg}`, ...args)
+  info: (msg, ...args) => console.log(`[HAJB] ${msg}`, ...args),
+  error: (msg, ...args) => console.error(`[HAJB] ${msg}`, ...args)
 };
 
 // 2. Storage Manager
@@ -12,13 +56,15 @@ const Storage = (() => {
 
   // Init sync
   chrome.storage.local.get(cachedSettings, (data) => {
-    cachedSettings = data;
+    cachedSettings = { actionType: normalizeActionType(data.actionType) };
+    updateInjectedButtons(cachedSettings.actionType);
   });
 
   // Listen for popup changes
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.actionType) {
-      cachedSettings.actionType = changes.actionType.newValue;
+      cachedSettings.actionType = normalizeActionType(changes.actionType.newValue);
+      updateInjectedButtons(cachedSettings.actionType);
     }
   });
 
@@ -71,14 +117,12 @@ const Automation = (() => {
       const menu = await waitForElement('[data-testid="Dropdown"]', document.body, 1000);
       if (!menu) throw new Error("Menu not found");
 
-      const isBlock = settings.actionType === 'block';
       const menuItems = menu.querySelectorAll('[role="menuitem"]');
       let targetItem = null;
 
       // Smart DOM matching for both EN and AR regardless of extension language
       for (const item of menuItems) {
-        if (item.textContent.includes(isBlock ? 'Block' : 'Mute') || 
-            item.textContent.includes(isBlock ? 'حظر' : 'كتم')) {
+        if (matchesActionText(item.textContent, settings.actionType)) {
           targetItem = item;
           break;
         }
@@ -87,14 +131,14 @@ const Automation = (() => {
       if (!targetItem) throw new Error(`${settings.actionType} option not found`);
       targetItem.click();
 
-      if (isBlock) {
+      if (settings.actionType === 'block') {
         const confirmSheet = await waitForElement('[data-testid="confirmationSheetDialog"]', document.body, 1000);
         if (!confirmSheet) throw new Error("Confirmation sheet not found");
 
         const buttons = confirmSheet.querySelectorAll('[role="button"]');
         let confirmBtn = null;
         for (const btn of buttons) {
-          if (btn.textContent.includes('Block') || btn.textContent.includes('حظر')) {
+          if (matchesActionText(btn.textContent, 'block')) {
             confirmBtn = btn;
             break;
           }
@@ -120,21 +164,13 @@ const Automation = (() => {
 
 // 4. Mutator & Event Delegation
 const Mutator = (() => {
-  const BUTTON_CLASS = 'ocb-action-btn';
+  const BUTTON_CLASS = 'hajb-action-btn';
 
   const createActionButton = (actionType) => {
-    const btn = document.createElement('div');
+    const btn = document.createElement('button');
     btn.className = BUTTON_CLASS;
-    btn.setAttribute('role', 'button');
-    btn.setAttribute('tabindex', '0');
-    
-    // Shield with slash (block) or bell with slash (mute)
-    const svgPath = actionType === 'block' 
-      ? 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8 0-1.85.63-3.55 1.69-4.9L16.9 18.31C15.55 19.37 13.85 20 12 20zm6.31-3.1L7.1 5.69C8.45 4.63 10.15 4 12 4c4.42 0 8 3.58 8 8 0 1.85-.63 3.55-1.69 4.9z'
-      : 'M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zM9.5 9.5h5v2h-5v-2z';
-
-    btn.innerHTML = `<svg viewBox="0 0 24 24" width="18.75" height="18.75" fill="currentColor"><path d="${svgPath}"></path></svg>`;
-    btn.title = chrome.i18n.getMessage("extName") || "One-Click Block";
+    btn.setAttribute('type', 'button');
+    applyActionPresentation(btn, actionType);
 
     return btn;
   };
@@ -143,12 +179,11 @@ const Mutator = (() => {
     const settings = Storage.getSettings();
     
     tweets.forEach(tweet => {
-      if (tweet.dataset.ocbInjected === 'true') return;
+      if (tweet.querySelector(`.${BUTTON_CLASS}`)) return;
 
       const caret = tweet.querySelector('[data-testid="caret"]');
-      if (!caret) return;
+      if (!caret?.parentElement) return;
       
-      tweet.dataset.ocbInjected = 'true';
       const btn = createActionButton(settings.actionType);
       caret.parentElement.insertBefore(btn, caret);
     });
@@ -167,6 +202,10 @@ const Mutator = (() => {
     if (!tweet || !caret) return;
 
     const settings = Storage.getSettings();
+    const previousStyles = {
+      opacity: tweet.style.opacity,
+      pointerEvents: tweet.style.pointerEvents
+    };
     
     // ENTERPRISE UPGRADE: Use opacity during execution to prevent React Unmount bug, then display none
     tweet.style.opacity = '0.3';
@@ -176,8 +215,8 @@ const Mutator = (() => {
     if (success) {
       tweet.style.display = 'none';
     } else {
-      tweet.style.opacity = '1';
-      tweet.style.pointerEvents = 'auto';
+      tweet.style.opacity = previousStyles.opacity;
+      tweet.style.pointerEvents = previousStyles.pointerEvents;
     }
   });
 
@@ -188,23 +227,35 @@ const Mutator = (() => {
 const Observer = (() => {
   let observer = null;
   let debounceTimer = null;
+  let pendingTweets = new Set();
 
   const handleMutations = (mutations) => {
-    let shouldUpdate = false;
-    for (const mutation of mutations) {
-      if (mutation.addedNodes.length > 0) {
-        shouldUpdate = true;
-        break;
+    const collectContainingTweet = (node) => {
+      if (!node || typeof node.closest !== 'function') return;
+
+      const parentTweet = node.closest('article[data-testid="tweet"]');
+      if (parentTweet) pendingTweets.add(parentTweet);
+    };
+
+    const collectAddedTweets = (node) => {
+      collectContainingTweet(node);
+
+      if (typeof node.querySelectorAll === 'function') {
+        node.querySelectorAll('article[data-testid="tweet"]').forEach((tweet) => pendingTweets.add(tweet));
       }
+    };
+
+    for (const mutation of mutations) {
+      collectContainingTweet(mutation.target);
+      mutation.addedNodes.forEach(collectAddedTweets);
     }
 
-    if (shouldUpdate) {
+    if (pendingTweets.size > 0) {
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
-        const tweets = document.querySelectorAll('article[data-testid="tweet"]:not([data-ocb-injected="true"])');
-        if (tweets.length > 0) {
-          Mutator.injectTweetButtons(tweets);
-        }
+        const tweetsToUpdate = pendingTweets;
+        pendingTweets = new Set();
+        Mutator.injectTweetButtons(tweetsToUpdate);
       }, 100); 
     }
   };
@@ -212,13 +263,13 @@ const Observer = (() => {
   const start = () => {
     if (observer) return;
     setTimeout(() => {
-      const tweets = document.querySelectorAll('article[data-testid="tweet"]:not([data-ocb-injected="true"])');
+      const tweets = document.querySelectorAll('article[data-testid="tweet"]');
       if (tweets.length > 0) Mutator.injectTweetButtons(tweets);
     }, 500);
 
     observer = new MutationObserver(handleMutations);
     observer.observe(document.body, { childList: true, subtree: true });
-    Logger.info('Enterprise Observer started with Event Delegation');
+    Logger.info('Observer started with event delegation');
   };
 
   return { start };

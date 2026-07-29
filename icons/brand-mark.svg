@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">HAJB shield</title>
+  <desc id="desc">A saffron shield with an H-shaped gate and a coral control slash on deep indigo.</desc>
+  <rect width="128" height="128" rx="28" fill="#161a33"/>
+  <path d="M64 16 104 31v31c0 24-15 41-40 51-25-10-40-27-40-51V31l40-15Z" fill="#f4b942"/>
+  <path d="M42 43h11v17h22V43h11v42H75V70H53v15H42V43Z" fill="#161a33"/>
+  <path d="m36 93 57-57" fill="none" stroke="#ff665e" stroke-width="10" stroke-linecap="round"/>
+</svg>
