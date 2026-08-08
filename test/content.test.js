@@ -4,6 +4,7 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 const contentScript = await readFile(new URL('../content/content.js', import.meta.url), 'utf8');
+const contentStyles = await readFile(new URL('../content/content.css', import.meta.url), 'utf8');
 
 class FakeElement {
   constructor(tagName, notifyMutation) {
@@ -248,6 +249,13 @@ function createPage(actionType = 'block', {
         listener({ actionType: { oldValue: actionType, newValue: nextActionType } }, 'local');
       }
       actionType = nextActionType;
+    },
+    emitSettingChange(key, newValue) {
+      const oldValue = storedSettings[key];
+      storedSettings[key] = newValue;
+      for (const listener of changeListeners) {
+        listener({ [key]: { oldValue, newValue } }, 'local');
+      }
     }
   };
 }
@@ -348,6 +356,29 @@ test('respects master and per-button visibility settings from the dashboard', ()
   });
   assert.equal(masterDisabled.document.querySelector('.hajb-account-action-btn').hidden, true);
   assert.equal(masterDisabled.document.querySelector('.hajb-not-interested-btn').hidden, true);
+});
+
+test('updates button visibility immediately when dashboard switches change', () => {
+  const { document, emitSettingChange } = createPage();
+  const accountButton = document.querySelector('.hajb-account-action-btn');
+  const notInterestedButton = document.querySelector('.hajb-not-interested-btn');
+
+  emitSettingChange('accountActionEnabled', false);
+  assert.equal(accountButton.hidden, true);
+  assert.equal(notInterestedButton.hidden, false);
+
+  emitSettingChange('notInterestedEnabled', false);
+  assert.equal(notInterestedButton.hidden, true);
+
+  emitSettingChange('accountActionEnabled', true);
+  assert.equal(accountButton.hidden, false);
+});
+
+test('hidden action buttons override their flex display rule', () => {
+  assert.match(
+    contentStyles,
+    /\.hajb-action-btn\[hidden\]\s*\{[^}]*display:\s*none\s*!important;/s
+  );
 });
 
 test('selects not interested in this post, records it, and avoids the similarly named Topic action', async () => {
