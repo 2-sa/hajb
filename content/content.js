@@ -10,10 +10,22 @@ const ACTION_PRESENTATION = Object.freeze({
     labels: ['mute', 'كتم'],
     messageKey: 'muteButtonLabel',
     svgPath: 'M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zM9.5 9.5h5v2h-5v-2z'
+  },
+  notInterested: {
+    labels: [
+      'not interested in this post',
+      'not interested in this tweet',
+      'غير مهتم بهذا المنشور',
+      'غير مهتم بهذه التغريدة',
+      'لست مهتمًا بهذا المنشور',
+      'لست مهتمًا بهذه التغريدة'
+    ],
+    messageKey: 'notInterestedButtonLabel',
+    svgPath: 'M2.1 3.51 3.51 2.1 21.9 20.49 20.49 21.9l-3.1-3.1A11.7 11.7 0 0 1 12 20C5 20 1 12 1 12a20.3 20.3 0 0 1 4.17-5.41L2.1 3.51zm5.18 5.18A5 5 0 0 0 14.3 15.7l-1.54-1.54a2.5 2.5 0 0 1-2.92-2.92L7.28 8.69zM12 4c7 0 11 8 11 8a20.8 20.8 0 0 1-3.22 4.47l-2.84-2.84A5 5 0 0 0 10.37 7.06L8.1 4.79A11.8 11.8 0 0 1 12 4z'
   }
 });
 
-const normalizeActionType = (actionType) => actionType === 'mute' ? 'mute' : 'block';
+const normalizeStoredActionType = (actionType) => actionType === 'mute' ? 'mute' : 'block';
 
 const matchesActionText = (textContent, actionType) => {
   const normalizedText = textContent
@@ -22,13 +34,14 @@ const matchesActionText = (textContent, actionType) => {
     .replace(/\s+/g, ' ')
     .toLocaleLowerCase();
 
-  return ACTION_PRESENTATION[normalizeActionType(actionType)].labels.some((label) => (
+  const presentation = ACTION_PRESENTATION[actionType] ?? ACTION_PRESENTATION.block;
+  return presentation.labels.some((label) => (
     normalizedText === label || normalizedText.startsWith(`${label} `) || normalizedText.startsWith(`${label}@`)
   ));
 };
 
 const applyActionPresentation = (button, actionType) => {
-  const actionTypeValue = normalizeActionType(actionType);
+  const actionTypeValue = ACTION_PRESENTATION[actionType] ? actionType : 'block';
   const presentation = ACTION_PRESENTATION[actionTypeValue];
   const label = chrome.i18n.getMessage(presentation.messageKey) || chrome.i18n.getMessage('extName') || 'HAJB';
 
@@ -38,9 +51,13 @@ const applyActionPresentation = (button, actionType) => {
   button.innerHTML = `<svg viewBox="0 0 24 24" width="18.75" height="18.75" fill="currentColor" aria-hidden="true"><path d="${presentation.svgPath}"></path></svg>`;
 };
 
-const updateInjectedButtons = (actionType) => {
-  document.querySelectorAll('.hajb-action-btn').forEach((button) => {
-    applyActionPresentation(button, actionType);
+const updateInjectedButtons = (settings) => {
+  document.querySelectorAll('.hajb-account-action-btn').forEach((button) => {
+    applyActionPresentation(button, settings.actionType);
+    button.hidden = !settings.hajbEnabled || !settings.accountActionEnabled;
+  });
+  document.querySelectorAll('.hajb-not-interested-btn').forEach((button) => {
+    button.hidden = !settings.hajbEnabled || !settings.notInterestedEnabled;
   });
 };
 
@@ -52,25 +69,48 @@ const Logger = {
 
 // 2. Storage Manager
 const Storage = (() => {
-  let cachedSettings = { actionType: 'block' };
+  let cachedSettings = {
+    actionType: 'block',
+    hajbEnabled: true,
+    accountActionEnabled: true,
+    notInterestedEnabled: true
+  };
+
+  const normalizeSettings = (settings) => ({
+    actionType: normalizeStoredActionType(settings.actionType),
+    hajbEnabled: settings.hajbEnabled !== false,
+    accountActionEnabled: settings.accountActionEnabled !== false,
+    notInterestedEnabled: settings.notInterestedEnabled !== false
+  });
 
   // Init sync
   chrome.storage.local.get(cachedSettings, (data) => {
-    cachedSettings = { actionType: normalizeActionType(data.actionType) };
-    updateInjectedButtons(cachedSettings.actionType);
+    cachedSettings = normalizeSettings(data);
+    updateInjectedButtons(cachedSettings);
   });
 
   // Listen for popup changes
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes.actionType) {
-      cachedSettings.actionType = normalizeActionType(changes.actionType.newValue);
-      updateInjectedButtons(cachedSettings.actionType);
+    if (area !== 'local') return;
+
+    for (const key of ['actionType', 'hajbEnabled', 'accountActionEnabled', 'notInterestedEnabled']) {
+      if (changes[key]) cachedSettings[key] = changes[key].newValue;
     }
+    cachedSettings = normalizeSettings(cachedSettings);
+    updateInjectedButtons(cachedSettings);
   });
 
   const getSettings = () => cachedSettings; // Now synchronous and instant
   return { getSettings };
 })();
+
+const recordSuccessfulAction = (actionType) => {
+  const response = chrome.runtime?.sendMessage?.({
+    type: 'HAJB_RECORD_ACTION',
+    actionType
+  });
+  response?.catch?.((error) => Logger.error(`Stats update failed: ${error.message}`));
+};
 
 // 3. Automation
 const Automation = (() => {
@@ -107,10 +147,10 @@ const Automation = (() => {
     return 'Unknown';
   };
 
-  const executeAction = async (tweetElement, caretElement, settings) => {
+  const executeAction = async (tweetElement, caretElement, actionType) => {
     try {
       const username = extractScreenName(tweetElement);
-      Logger.info(`Executing ${settings.actionType} on ${username}`);
+      Logger.info(`Executing ${actionType} on ${username}`);
       
       caretElement.click();
 
@@ -122,16 +162,16 @@ const Automation = (() => {
 
       // Smart DOM matching for both EN and AR regardless of extension language
       for (const item of menuItems) {
-        if (matchesActionText(item.textContent, settings.actionType)) {
+        if (matchesActionText(item.textContent, actionType)) {
           targetItem = item;
           break;
         }
       }
 
-      if (!targetItem) throw new Error(`${settings.actionType} option not found`);
+      if (!targetItem) throw new Error(`${actionType} option not found`);
       targetItem.click();
 
-      if (settings.actionType === 'block') {
+      if (actionType === 'block') {
         const confirmSheet = await waitForElement('[data-testid="confirmationSheetDialog"]', document.body, 1000);
         if (!confirmSheet) throw new Error("Confirmation sheet not found");
 
@@ -165,10 +205,12 @@ const Automation = (() => {
 // 4. Mutator & Event Delegation
 const Mutator = (() => {
   const BUTTON_CLASS = 'hajb-action-btn';
+  const ACCOUNT_BUTTON_CLASS = 'hajb-account-action-btn';
+  const NOT_INTERESTED_BUTTON_CLASS = 'hajb-not-interested-btn';
 
-  const createActionButton = (actionType) => {
+  const createActionButton = (actionType, roleClass) => {
     const btn = document.createElement('button');
-    btn.className = BUTTON_CLASS;
+    btn.className = `${BUTTON_CLASS} ${roleClass}`;
     btn.setAttribute('type', 'button');
     applyActionPresentation(btn, actionType);
 
@@ -179,13 +221,23 @@ const Mutator = (() => {
     const settings = Storage.getSettings();
     
     tweets.forEach(tweet => {
-      if (tweet.querySelector(`.${BUTTON_CLASS}`)) return;
-
       const caret = tweet.querySelector('[data-testid="caret"]');
       if (!caret?.parentElement) return;
-      
-      const btn = createActionButton(settings.actionType);
-      caret.parentElement.insertBefore(btn, caret);
+
+      let accountButton = tweet.querySelector(`.${ACCOUNT_BUTTON_CLASS}`);
+      let notInterestedButton = tweet.querySelector(`.${NOT_INTERESTED_BUTTON_CLASS}`);
+
+      if (!accountButton) {
+        accountButton = createActionButton(settings.actionType, ACCOUNT_BUTTON_CLASS);
+        caret.parentElement.insertBefore(accountButton, notInterestedButton ?? caret);
+      }
+      accountButton.hidden = !settings.hajbEnabled || !settings.accountActionEnabled;
+
+      if (!notInterestedButton) {
+        notInterestedButton = createActionButton('notInterested', NOT_INTERESTED_BUTTON_CLASS);
+        caret.parentElement.insertBefore(notInterestedButton, caret);
+      }
+      notInterestedButton.hidden = !settings.hajbEnabled || !settings.notInterestedEnabled;
     });
   };
 
@@ -202,6 +254,9 @@ const Mutator = (() => {
     if (!tweet || !caret) return;
 
     const settings = Storage.getSettings();
+    const actionType = btn.dataset.actionType === 'notInterested'
+      ? 'notInterested'
+      : settings.actionType;
     const previousStyles = {
       opacity: tweet.style.opacity,
       pointerEvents: tweet.style.pointerEvents
@@ -211,8 +266,9 @@ const Mutator = (() => {
     tweet.style.opacity = '0.3';
     tweet.style.pointerEvents = 'none';
 
-    const success = await Automation.executeAction(tweet, caret, settings);
+    const success = await Automation.executeAction(tweet, caret, actionType);
     if (success) {
+      recordSuccessfulAction(actionType);
       tweet.style.display = 'none';
     } else {
       tweet.style.opacity = previousStyles.opacity;

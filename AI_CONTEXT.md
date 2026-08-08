@@ -42,5 +42,8 @@ Twitter can replace a tweet's action bar while retaining the article element, wh
 ### 8. Settings Presentation Consistency
 The cached setting is the source of truth for both execution and presentation. Initial storage reads and subsequent `storage.onChanged` events must update already-injected buttons so the visible icon and accessible label always match the action that will execute.
 
+### 9. Centralized Action Statistics
+Successful actions are reported to `background.js`, which serializes counter updates before writing `actionStats` to local extension storage. Keep counter writes out of individual content-script contexts so simultaneous actions in multiple tabs do not overwrite one another. The manifest intentionally declares both `background.service_worker` for Chromium and `background.scripts` for Firefox Manifest V3 compatibility.
+
 ---
 **Summary for AI:** Maintain the zero-latency philosophy. If you add features, ensure they are O(1) in complexity during scroll events and do not rely on asynchronous I/O unless absolutely necessary.

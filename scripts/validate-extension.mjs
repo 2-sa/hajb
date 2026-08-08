@@ -45,6 +45,8 @@ const referencedFiles = new Set([
   ...Object.values(manifest.icons ?? {}),
   ...Object.values(manifest.action?.default_icon ?? {}),
   manifest.action?.default_popup,
+  manifest.background?.service_worker,
+  ...(manifest.background?.scripts ?? []),
   ...(manifest.content_scripts ?? []).flatMap((script) => [...(script.js ?? []), ...(script.css ?? [])])
 ].filter(Boolean));
 

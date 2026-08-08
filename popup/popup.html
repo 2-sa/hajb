@@ -8,50 +8,102 @@
 </head>
 <body>
   <main class="panel">
-    <div class="signal-rail" aria-hidden="true"></div>
+    <div class="signal-rail" id="signalRail" aria-hidden="true"></div>
 
     <header class="brand-lockup">
       <img class="brand-mark" src="../icons/brand-mark.svg" alt="">
-      <div>
+      <div class="brand-copy">
         <p class="brand-name" aria-label="HAJB">HAJB</p>
         <p class="brand-tagline" data-i18n="brandTagline">خطّك الزمني، بقرارك.</p>
       </div>
+      <label class="master-control" for="hajbEnabled">
+        <span class="master-status" id="masterStatus">فعّال</span>
+        <input class="switch-input" id="hajbEnabled" type="checkbox">
+        <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+      </label>
     </header>
 
-    <section class="control-section" aria-labelledby="actionTypeLabel">
+    <section class="dashboard-section controls-section" aria-labelledby="buttonsTitle">
       <div class="section-heading">
-        <span class="eyebrow" data-i18n="modeEyebrow">وضع النقرة الواحدة</span>
-        <h1 id="actionTypeLabel" data-i18n="actionTypeLabel">ماذا تنفّذ النقرة؟</h1>
+        <span class="eyebrow" data-i18n="controlsEyebrow">التحكم</span>
+        <h1 id="buttonsTitle" data-i18n="buttonsTitle">أزرار الخط الزمني</h1>
       </div>
 
-      <div class="action-grid" role="radiogroup" aria-labelledby="actionTypeLabel">
-        <label class="action-option action-option--block">
-          <input type="radio" name="actionType" value="block">
-          <span class="action-card">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <circle cx="12" cy="12" r="8"></circle>
-              <path d="m6.4 6.4 11.2 11.2"></path>
-            </svg>
-            <span data-i18n="blockAction">حظر</span>
+      <article class="feature-card" id="accountFeatureCard">
+        <div class="feature-heading">
+          <span class="feature-icon feature-icon--account" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"></circle><path d="m6.4 6.4 11.2 11.2"></path></svg>
           </span>
-        </label>
+          <div class="feature-copy">
+            <h2 data-i18n="accountButtonTitle">إجراء الحساب</h2>
+            <p data-i18n="accountButtonDescription">زر مباشر للحظر أو الكتم</p>
+          </div>
+          <label class="feature-switch" for="accountActionEnabled">
+            <span class="sr-only" data-i18n="accountButtonToggleLabel">تشغيل زر الحساب</span>
+            <input class="switch-input" id="accountActionEnabled" type="checkbox">
+            <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+          </label>
+        </div>
 
-        <label class="action-option action-option--mute">
-          <input type="radio" name="actionType" value="mute">
-          <span class="action-card">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path>
-              <path d="M10 21h4M4 4l16 16"></path>
-            </svg>
-            <span data-i18n="muteAction">كتم</span>
+        <div class="action-grid" id="actionChoices" role="radiogroup" aria-label="إجراء الحساب">
+          <label class="action-option action-option--block">
+            <input type="radio" name="actionType" value="block">
+            <span class="action-card"><span data-i18n="blockAction">حظر</span></span>
+          </label>
+          <label class="action-option action-option--mute">
+            <input type="radio" name="actionType" value="mute">
+            <span class="action-card"><span data-i18n="muteAction">كتم</span></span>
+          </label>
+        </div>
+      </article>
+
+      <article class="feature-card feature-card--compact" id="notInterestedFeatureCard">
+        <div class="feature-heading">
+          <span class="feature-icon feature-icon--interest" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.2A9 9 0 0 1 12 5c5.8 0 9 7 9 7a15 15 0 0 1-2.1 3.2M6.1 6.1C4.1 7.5 3 9.7 3 12c0 0 3.2 7 9 7 1 0 2-.2 2.8-.5"></path></svg>
           </span>
-        </label>
+          <div class="feature-copy">
+            <h2 data-i18n="notInterestedTitle">غير مهتم</h2>
+            <p data-i18n="notInterestedDescription">إخفاء المنشور وتحسين التوصيات</p>
+          </div>
+          <label class="feature-switch" for="notInterestedEnabled">
+            <span class="sr-only" data-i18n="notInterestedToggleLabel">تشغيل زر غير مهتم</span>
+            <input class="switch-input" id="notInterestedEnabled" type="checkbox">
+            <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+          </label>
+        </div>
+      </article>
+    </section>
+
+    <section class="dashboard-section stats-section" aria-labelledby="statsTitle">
+      <div class="section-heading section-heading--stats">
+        <div>
+          <span class="eyebrow" data-i18n="statsEyebrow">منذ التثبيت</span>
+          <h1 id="statsTitle" data-i18n="statsTitle">أثر HAJB</h1>
+        </div>
+        <button class="reset-button" id="resetStats" type="button" data-i18n="resetStats">تصفير</button>
       </div>
+
+      <div class="stats-strip" aria-live="polite">
+        <div class="stat stat--block">
+          <strong id="blockCount">0</strong>
+          <span data-i18n="blockStat">حظر</span>
+        </div>
+        <div class="stat stat--mute">
+          <strong id="muteCount">0</strong>
+          <span data-i18n="muteStat">كتم</span>
+        </div>
+        <div class="stat stat--interest">
+          <strong id="notInterestedCount">0</strong>
+          <span data-i18n="notInterestedStat">غير مهتم</span>
+        </div>
+      </div>
+      <p class="total-line"><span data-i18n="totalLabel">إجمالي القرارات</span><strong id="totalCount">0</strong></p>
     </section>
 
     <footer class="privacy-note">
-      <span class="status-dot" aria-hidden="true"></span>
-      <span data-i18n="privacyNote">يعمل محليًا • بلا تتبع</span>
+      <span class="status-dot" id="statusDot" aria-hidden="true"></span>
+      <span id="footerStatus">فعّال • يعمل محليًا بلا تتبع</span>
     </footer>
   </main>
   <script src="popup.js"></script>

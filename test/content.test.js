@@ -108,6 +108,7 @@ function createPage(actionType = 'block', {
   deferStorageRead = false,
   deferTimers = false,
   menuItemTexts = [],
+  storedSettings = {},
   tweetCount = 1
 } = {}) {
   const mutationObservers = [];
@@ -154,6 +155,7 @@ function createPage(actionType = 'block', {
   };
 
   const changeListeners = [];
+  const runtimeMessages = [];
   let pendingStorageRead = null;
   const document = {
     body,
@@ -169,14 +171,15 @@ function createPage(actionType = 'block', {
         return {
           extName: 'HAJB',
           blockButtonLabel: 'Block account with one tap',
-          muteButtonLabel: 'Mute account with one tap'
+          muteButtonLabel: 'Mute account with one tap',
+          notInterestedButtonLabel: 'Not interested in this post'
         }[key] ?? '';
       }
     },
     storage: {
       local: {
         get(defaults, callback) {
-          const complete = () => callback({ ...defaults, actionType });
+          const complete = () => callback({ ...defaults, ...storedSettings, actionType });
           if (deferStorageRead) pendingStorageRead = complete;
           else complete();
         }
@@ -185,6 +188,12 @@ function createPage(actionType = 'block', {
         addListener(listener) {
           changeListeners.push(listener);
         }
+      }
+    },
+    runtime: {
+      sendMessage(message) {
+        runtimeMessages.push(message);
+        return Promise.resolve({ ok: true });
       }
     }
   };
@@ -224,6 +233,9 @@ function createPage(actionType = 'block', {
     getClickedMenuText() {
       return clickedMenuText;
     },
+    getRuntimeMessages() {
+      return runtimeMessages;
+    },
     flushTimers() {
       while (timers.size > 0) {
         const pending = [...timers.values()];
@@ -253,7 +265,7 @@ test('restores the action button when X replaces the tweet action bar', () => {
 
 test('keeps the visible action and accessible label in sync with settings', () => {
   const { document, emitStorageChange } = createPage('block');
-  const button = document.querySelector('.hajb-action-btn');
+  const button = document.querySelector('.hajb-account-action-btn');
 
   assert.equal(button.tagName, 'BUTTON');
   assert.equal(button.getAttribute('aria-label'), 'Block account with one tap');
@@ -267,7 +279,7 @@ test('keeps the visible action and accessible label in sync with settings', () =
 
 test('updates an already injected button when the initial storage read finishes late', () => {
   const { document, completeStorageRead } = createPage('mute', { deferStorageRead: true });
-  const button = document.querySelector('.hajb-action-btn');
+  const button = document.querySelector('.hajb-account-action-btn');
   assert.equal(button.getAttribute('aria-label'), 'Block account with one tap');
 
   completeStorageRead();
@@ -278,7 +290,7 @@ test('updates an already injected button when the initial storage read finishes 
 test('restores the tweet inline styles when the X action menu cannot be opened', async () => {
   const { document } = createPage();
   const tweet = document.querySelector('article[data-testid="tweet"]');
-  const button = document.querySelector('.hajb-action-btn');
+  const button = document.querySelector('.hajb-account-action-btn');
   tweet.style.opacity = '0.75';
   tweet.style.pointerEvents = 'inherit';
 
@@ -300,7 +312,7 @@ test('does not select the Arabic undo action when muting an account', async () =
 
   await document.body.dispatchEvent({
     type: 'click',
-    target: document.querySelector('.hajb-action-btn'),
+    target: document.querySelector('.hajb-account-action-btn'),
     preventDefault() {},
     stopPropagation() {}
   });
@@ -308,16 +320,87 @@ test('does not select the Arabic undo action when muting an account', async () =
   assert.equal(getClickedMenuText(), 'كتم @alice');
 });
 
+test('injects a fixed not-interested button beside the configured account action', () => {
+  const { document, emitStorageChange } = createPage('block');
+  const actions = document.querySelector('.actions');
+  const accountButton = document.querySelector('.hajb-account-action-btn');
+  const notInterestedButton = document.querySelector('.hajb-not-interested-btn');
+
+  assert.deepEqual(actions.children.slice(0, 3), [accountButton, notInterestedButton, actions.querySelector('[data-testid="caret"]')]);
+  assert.equal(notInterestedButton.getAttribute('aria-label'), 'Not interested in this post');
+  assert.equal(notInterestedButton.dataset.actionType, 'notInterested');
+
+  emitStorageChange('mute');
+
+  assert.equal(accountButton.dataset.actionType, 'mute');
+  assert.equal(notInterestedButton.dataset.actionType, 'notInterested');
+});
+
+test('respects master and per-button visibility settings from the dashboard', () => {
+  const accountDisabled = createPage('block', {
+    storedSettings: { accountActionEnabled: false, notInterestedEnabled: true }
+  });
+  assert.equal(accountDisabled.document.querySelector('.hajb-account-action-btn').hidden, true);
+  assert.equal(accountDisabled.document.querySelector('.hajb-not-interested-btn').hidden, false);
+
+  const masterDisabled = createPage('block', {
+    storedSettings: { hajbEnabled: false }
+  });
+  assert.equal(masterDisabled.document.querySelector('.hajb-account-action-btn').hidden, true);
+  assert.equal(masterDisabled.document.querySelector('.hajb-not-interested-btn').hidden, true);
+});
+
+test('selects not interested in this post, records it, and avoids the similarly named Topic action', async () => {
+  const { document, getClickedMenuText, getRuntimeMessages } = createPage('block', {
+    menuItemTexts: ['Not interested in this Topic', 'Not interested in this post']
+  });
+  const tweet = document.querySelector('article[data-testid="tweet"]');
+
+  await document.body.dispatchEvent({
+    type: 'click',
+    target: document.querySelector('.hajb-not-interested-btn'),
+    preventDefault() {},
+    stopPropagation() {}
+  });
+
+  assert.equal(getClickedMenuText(), 'Not interested in this post');
+  assert.equal(tweet.style.display, 'none');
+  assert.equal(JSON.stringify(getRuntimeMessages()), JSON.stringify([{
+    type: 'HAJB_RECORD_ACTION',
+    actionType: 'notInterested'
+  }]));
+});
+
+test('selects the Arabic not-interested post action without selecting the Topic action', async () => {
+  const { document, getClickedMenuText } = createPage('block', {
+    menuItemTexts: ['غير مهتم بهذا الموضوع', 'غير مهتم بهذا المنشور']
+  });
+
+  await document.body.dispatchEvent({
+    type: 'click',
+    target: document.querySelector('.hajb-not-interested-btn'),
+    preventDefault() {},
+    stopPropagation() {}
+  });
+
+  assert.equal(getClickedMenuText(), 'غير مهتم بهذا المنشور');
+});
+
 test('merges affected tweets across the observer debounce window', () => {
   const { document, flushTimers } = createPage('block', { deferTimers: true, tweetCount: 2 });
   flushTimers();
   const tweets = document.querySelectorAll('article[data-testid="tweet"]');
 
-  for (const tweet of tweets) tweet.querySelector('.hajb-action-btn').remove();
+  for (const tweet of tweets) {
+    tweet.querySelector('.hajb-account-action-btn').remove();
+    tweet.querySelector('.hajb-not-interested-btn').remove();
+  }
   tweets[0].querySelector('.actions').append(document.createElement('span'));
   tweets[1].querySelector('.actions').append(document.createElement('span'));
   flushTimers();
 
-  assert.ok(tweets[0].querySelector('.hajb-action-btn'));
-  assert.ok(tweets[1].querySelector('.hajb-action-btn'));
+  assert.ok(tweets[0].querySelector('.hajb-account-action-btn'));
+  assert.ok(tweets[0].querySelector('.hajb-not-interested-btn'));
+  assert.ok(tweets[1].querySelector('.hajb-account-action-btn'));
+  assert.ok(tweets[1].querySelector('.hajb-not-interested-btn'));
 });

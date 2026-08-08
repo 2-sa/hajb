@@ -27,6 +27,12 @@
   color: rgb(51, 166, 143);
 }
 
+.hajb-action-btn[data-action-type="notInterested"]:hover,
+.hajb-action-btn[data-action-type="notInterested"]:focus-visible {
+  background-color: rgba(244, 185, 66, 0.14);
+  color: rgb(202, 139, 4);
+}
+
 .hajb-action-btn:focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 2px;
