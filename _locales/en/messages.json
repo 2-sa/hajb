@@ -1,6 +1,6 @@
 {
-  "extName": { "message": "HAJB" },
-  "extShortName": { "message": "HAJB" },
+  "extName": { "message": "One Click Block Twitter" },
+  "extShortName": { "message": "1ClickBlock" },
   "extDescription": { "message": "Take control of your timeline: block, mute, or dismiss X posts in one tap, locally and without tracking." },
   "brandTagline": { "message": "Your timeline. Your call." },
   "modeEyebrow": { "message": "One-tap mode" },
@@ -20,7 +20,7 @@
   "notInterestedDescription": { "message": "Dismiss the post and tune recommendations" },
   "notInterestedToggleLabel": { "message": "Enable not-interested button" },
   "statsEyebrow": { "message": "Since installation" },
-  "statsTitle": { "message": "HAJB impact" },
+  "statsTitle": { "message": "One Click Block impact" },
   "resetStats": { "message": "Reset" },
   "blockStat": { "message": "Blocked" },
   "muteStat": { "message": "Muted" },

@@ -58,9 +58,9 @@ input { font: inherit; }
   margin: 0;
   color: var(--saffron);
   font-family: "Arial Black", "Segoe UI Black", sans-serif;
-  font-size: 20px;
-  line-height: 1;
-  letter-spacing: 0.15em;
+  font-size: 15px;
+  line-height: 1.1;
+  letter-spacing: 0.06em;
 }
 .brand-tagline { margin: 5px 0 0; color: var(--slate); font-size: 11px; }
 

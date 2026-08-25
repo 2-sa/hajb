@@ -1,6 +1,6 @@
 {
-  "extName": { "message": "HAJB — حَجْب" },
-  "extShortName": { "message": "HAJB" },
+  "extName": { "message": "One Click Block Twitter" },
+  "extShortName": { "message": "1ClickBlock" },
   "extDescription": { "message": "تحكّم سريع في خطّك الزمني: احظر أو اكتم أو أخفِ منشورات X بنقرة واحدة، محليًا ومن دون تتبع." },
   "brandTagline": { "message": "خطّك الزمني، بقرارك." },
   "modeEyebrow": { "message": "وضع النقرة الواحدة" },
@@ -20,7 +20,7 @@
   "notInterestedDescription": { "message": "إخفاء المنشور وتحسين التوصيات" },
   "notInterestedToggleLabel": { "message": "تشغيل زر غير مهتم" },
   "statsEyebrow": { "message": "منذ التثبيت" },
-  "statsTitle": { "message": "أثر HAJB" },
+  "statsTitle": { "message": "أثر One Click Block" },
   "resetStats": { "message": "تصفير" },
   "blockStat": { "message": "حظر" },
   "muteStat": { "message": "كتم" },

@@ -1,21 +1,21 @@
-# HAJB Brand System
+# One Click Block Twitter Brand System
 
 ## Core identity
 
-- **English name:** `HAJB` — always uppercase.
-- **Arabic name:** `حَجْب` — use alongside HAJB when Arabic context benefits from pronunciation.
+- **Product name:** `One Click Block Twitter`.
+- **Compact wordmark:** `ONE CLICK BLOCK` — use inside the extension popup when space is limited.
 - **Tagline (AR):** `خطّك الزمني، بقرارك.`
 - **Tagline (EN):** `Your timeline. Your call.`
 - **Brand promise:** Fast, deliberate control over timeline noise without tracking.
 
-HAJB should feel decisive, calm, and private. It is a control tool, not an aggressive moderation brand. Copy uses plain verbs—حظر، كتم، Block, Mute—and never makes exaggerated performance or security claims.
+One Click Block Twitter should feel decisive, calm, and private. It is a control tool, not an aggressive moderation brand. Copy uses plain verbs—حظر، كتم، Block, Mute—and never makes exaggerated performance or security claims.
 
 ## Mark
 
 The mark combines three ideas:
 
 1. A shield for user control.
-2. An H-shaped gate for HAJB.
+2. A protected action gate for one-click control.
 3. A coral slash for the decision to stop unwanted noise.
 
 The vector master is `icons/brand-mark.svg`. Manifest icons are raster exports at 16, 48, and 128 pixels.
@@ -26,7 +26,7 @@ The vector master is `icons/brand-mark.svg`. Manifest icons are raster exports a
 - Do not recolor individual elements outside the approved palette.
 - Do not rotate, add shadows, or place the mark on a visually noisy background.
 - At sizes below 24px, use the icon alone; do not pair it with the wordmark.
-- Use `HAJB` as live text instead of baking the wordmark into images.
+- Use `ONE CLICK BLOCK` as live text instead of baking the wordmark into images.
 
 ## Palette
 

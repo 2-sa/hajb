@@ -170,7 +170,7 @@ function createPage(actionType = 'block', {
     i18n: {
       getMessage(key) {
         return {
-          extName: 'HAJB',
+          extName: 'One Click Block Twitter',
           blockButtonLabel: 'Block account with one tap',
           muteButtonLabel: 'Mute account with one tap',
           notInterestedButtonLabel: 'Not interested in this post'

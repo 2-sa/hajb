@@ -1,9 +1,9 @@
-# HAJB Engineering Context
+# One Click Block Twitter Engineering Context
 
-> **Note to future maintainers:** Read this file before modifying the extension. It explains the performance and stability constraints behind HAJB's implementation.
+> **Note to future maintainers:** Read this file before modifying the extension. It explains the performance and stability constraints behind One Click Block Twitter's implementation.
 
 ## Core Philosophy
-HAJB is designed to make blocking or muting an X account feel immediate. Performance, memory efficiency, predictable targeting, and clear visual feedback are the highest priorities.
+One Click Block Twitter is designed to make blocking or muting an X account feel immediate. Performance, memory efficiency, predictable targeting, and clear visual feedback are the highest priorities.
 
 ## Critical Architectural Decisions
 

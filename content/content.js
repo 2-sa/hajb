@@ -1,4 +1,4 @@
-// HAJB Content Script
+// One Click Block Twitter content script
 
 const ACTION_PRESENTATION = Object.freeze({
   block: {
@@ -43,7 +43,7 @@ const matchesActionText = (textContent, actionType) => {
 const applyActionPresentation = (button, actionType) => {
   const actionTypeValue = ACTION_PRESENTATION[actionType] ? actionType : 'block';
   const presentation = ACTION_PRESENTATION[actionTypeValue];
-  const label = chrome.i18n.getMessage(presentation.messageKey) || chrome.i18n.getMessage('extName') || 'HAJB';
+  const label = chrome.i18n.getMessage(presentation.messageKey) || chrome.i18n.getMessage('extName') || 'One Click Block Twitter';
 
   button.setAttribute('aria-label', label);
   button.dataset.actionType = actionTypeValue;
@@ -63,8 +63,8 @@ const updateInjectedButtons = (settings) => {
 
 // 1. Logger
 const Logger = {
-  info: (msg, ...args) => console.log(`[HAJB] ${msg}`, ...args),
-  error: (msg, ...args) => console.error(`[HAJB] ${msg}`, ...args)
+  info: (msg, ...args) => console.log(`[One Click Block Twitter] ${msg}`, ...args),
+  error: (msg, ...args) => console.error(`[One Click Block Twitter] ${msg}`, ...args)
 };
 
 // 2. Storage Manager

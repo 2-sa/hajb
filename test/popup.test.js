@@ -108,8 +108,8 @@ function runPopup(uiLanguage = 'en-US', stored = {}) {
   };
 }
 
-test('renders the HAJB dashboard controls and three action counters', () => {
-  assert.match(popupMarkup, /class="brand-name"[^>]*>HAJB</);
+test('renders the One Click Block dashboard controls and three action counters', () => {
+  assert.match(popupMarkup, /class="brand-name"[^>]*>ONE CLICK BLOCK</);
   assert.match(popupMarkup, /id="hajbEnabled"/);
   assert.match(popupMarkup, /id="accountActionEnabled"/);
   assert.match(popupMarkup, /id="notInterestedEnabled"/);
