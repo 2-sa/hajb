@@ -207,14 +207,28 @@ function createPage(actionType = 'block', {
     disconnect() {}
   }
   let nextTimerId = 1;
+  let currentTime = 0;
   const timers = new Map();
-  const setTimeout = (callback) => {
+  const setTimeout = (callback, delay = 0) => {
     const id = nextTimerId++;
-    if (deferTimers) timers.set(id, callback);
+    if (deferTimers) timers.set(id, { callback, dueAt: currentTime + delay });
     else callback();
     return id;
   };
   const clearTimeout = (id) => timers.delete(id);
+  const advanceTime = (milliseconds) => {
+    currentTime += milliseconds;
+    while (true) {
+      const dueTimers = [...timers.entries()]
+        .filter(([, timer]) => timer.dueAt <= currentTime)
+        .sort(([, left], [, right]) => left.dueAt - right.dueAt);
+      if (dueTimers.length === 0) break;
+      for (const [id, timer] of dueTimers) {
+        timers.delete(id);
+        timer.callback();
+      }
+    }
+  };
 
   vm.runInNewContext(contentScript, {
     chrome,
@@ -227,6 +241,7 @@ function createPage(actionType = 'block', {
 
   return {
     document,
+    advanceTime,
     completeStorageRead() {
       pendingStorageRead?.();
       pendingStorageRead = null;
@@ -239,9 +254,8 @@ function createPage(actionType = 'block', {
     },
     flushTimers() {
       while (timers.size > 0) {
-        const pending = [...timers.values()];
-        timers.clear();
-        pending.forEach((callback) => callback());
+        const nextDueAt = Math.min(...[...timers.values()].map((timer) => timer.dueAt));
+        advanceTime(nextDueAt - currentTime);
       }
     },
     emitStorageChange(nextActionType) {
@@ -434,4 +448,19 @@ test('merges affected tweets across the observer debounce window', () => {
   assert.ok(tweets[0].querySelector('.hajb-not-interested-btn'));
   assert.ok(tweets[1].querySelector('.hajb-account-action-btn'));
   assert.ok(tweets[1].querySelector('.hajb-not-interested-btn'));
+});
+
+test('injects actions while X keeps mutating the timeline', () => {
+  const { document, advanceTime, flushTimers } = createPage('block', { deferTimers: true });
+  flushTimers();
+  const tweet = document.querySelector('article[data-testid="tweet"]');
+  const actions = tweet.querySelector('.actions');
+
+  tweet.querySelector('.hajb-account-action-btn').remove();
+  for (let index = 0; index < 20; index += 1) {
+    actions.append(document.createElement('span'));
+    advanceTime(50);
+  }
+
+  assert.ok(tweet.querySelector('.hajb-account-action-btn'));
 });

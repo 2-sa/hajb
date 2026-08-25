@@ -306,9 +306,9 @@ const Observer = (() => {
       mutation.addedNodes.forEach(collectAddedTweets);
     }
 
-    if (pendingTweets.size > 0) {
-      clearTimeout(debounceTimer);
+    if (pendingTweets.size > 0 && debounceTimer === null) {
       debounceTimer = setTimeout(() => {
+        debounceTimer = null;
         const tweetsToUpdate = pendingTweets;
         pendingTweets = new Set();
         Mutator.injectTweetButtons(tweetsToUpdate);
