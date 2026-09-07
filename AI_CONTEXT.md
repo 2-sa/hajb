@@ -45,5 +45,14 @@ The cached setting is the source of truth for both execution and presentation. I
 ### 9. Centralized Action Statistics
 Successful actions are reported to `background.js`, which serializes counter updates before writing `actionStats` to local extension storage. Keep counter writes out of individual content-script contexts so simultaneous actions in multiple tabs do not overwrite one another. The manifest intentionally declares both `background.service_worker` for Chromium and `background.scripts` for Firefox Manifest V3 compatibility.
 
+### 10. Resource scheduling (3.1.3)
+The timeline observer disconnects when the document is hidden, the master switch is off, both action switches are off, or pagehide fires. Resuming performs a catch-up scan. No background polling interval is used.
+
+Keep cached control references in a WeakMap keyed by tweet; never use a permanent Set of all visited tweets. Validate the cached caret and button parents before skipping work so React action-bar replacement still works. Detached queued tweets must not receive buttons.
+
+Discovery processes at most 20 queued/scanned tweets per scheduled task with a 32 ms delay between tasks. The pending mutation queue is capped at 256 tweets, with a catch-up scan on overflow. The scan iterator temporarily retains the current DOM snapshot until drained; clear it and the queue on pause. This bounds injection work, not the cost of the initial querySelectorAll or every possible X DOM mutation.
+
+Ignore unrelated storage events (especially actionStats). Do not rebuild unchanged button SVGs. Successful menu waits must cancel their timeout as well as disconnecting their temporary observer.
+
 ---
 **Summary for AI:** Maintain the zero-latency philosophy. If you add features, ensure they are O(1) in complexity during scroll events and do not rely on asynchronous I/O unless absolutely necessary.

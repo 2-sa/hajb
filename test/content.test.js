@@ -82,6 +82,14 @@ class FakeElement {
     return this.querySelectorAll(selector)[0] ?? null;
   }
 
+  contains(node) {
+    while (node) {
+      if (node === this) return true;
+      node = node.parentElement;
+    }
+    return false;
+  }
+
   querySelectorAll(selector) {
     return descendants(this).filter((element) => matches(element, selector));
   }
@@ -115,7 +123,7 @@ function createPage(actionType = 'block', {
   const mutationObservers = [];
   const notifyMutation = (node, target) => {
     for (const observer of mutationObservers) {
-      observer.callback([{ addedNodes: [node], target }]);
+      if (observer.active) observer.callback([{ addedNodes: [node], target }]);
     }
   };
   const createElement = (tagName) => new FakeElement(tagName, notifyMutation);
@@ -160,9 +168,10 @@ function createPage(actionType = 'block', {
   let pendingStorageRead = null;
   const document = {
     body,
+    hidden: false,
     readyState: 'complete',
     createElement,
-    addEventListener() {},
+    addEventListener: (type, listener) => body.addEventListener(type, listener),
     querySelector: (selector) => body.querySelector(selector),
     querySelectorAll: (selector) => body.querySelectorAll(selector)
   };
@@ -203,8 +212,8 @@ function createPage(actionType = 'block', {
       this.callback = callback;
       mutationObservers.push(this);
     }
-    observe() {}
-    disconnect() {}
+    observe() { this.active = true; }
+    disconnect() { this.active = false; }
   }
   let nextTimerId = 1;
   let currentTime = 0;
@@ -241,6 +250,12 @@ function createPage(actionType = 'block', {
 
   return {
     document,
+    activeObservers: () => mutationObservers.filter((observer) => observer.active).length,
+    pendingTimerCount: () => timers.size,
+    setHidden(hidden) {
+      document.hidden = hidden;
+      return body.dispatchEvent({ type: 'visibilitychange' });
+    },
     advanceTime,
     completeStorageRead() {
       pendingStorageRead?.();
@@ -368,8 +383,8 @@ test('respects master and per-button visibility settings from the dashboard', ()
   const masterDisabled = createPage('block', {
     storedSettings: { hajbEnabled: false }
   });
-  assert.equal(masterDisabled.document.querySelector('.hajb-account-action-btn').hidden, true);
-  assert.equal(masterDisabled.document.querySelector('.hajb-not-interested-btn').hidden, true);
+  assert.equal(masterDisabled.document.querySelector('.hajb-account-action-btn'), null);
+  assert.equal(masterDisabled.document.querySelector('.hajb-not-interested-btn'), null);
 });
 
 test('updates button visibility immediately when dashboard switches change', () => {
@@ -463,4 +478,114 @@ test('injects actions while X keeps mutating the timeline', () => {
   }
 
   assert.ok(tweet.querySelector('.hajb-account-action-btn'));
+});
+
+test('counter writes do not redraw or scan timeline controls', () => {
+  const page = createPage();
+  let scans = 0;
+  const original = page.document.querySelectorAll;
+  page.document.querySelectorAll = (...args) => { scans++; return original(...args); };
+  for (let i = 0; i < 100; i++) page.emitSettingChange('actionStats', { block: i });
+  assert.equal(scans, 0);
+});
+
+test('ordinary tweet updates reuse intact controls without querying the tweet again', () => {
+  const page = createPage('block', { deferTimers: true });
+  page.flushTimers();
+  const tweet = page.document.querySelector('article[data-testid="tweet"]');
+  const user = tweet.querySelector('[data-testid="User-Name"]');
+  let scans = 0;
+  const original = tweet.querySelector;
+  tweet.querySelector = (...args) => { scans++; return original.call(tweet, ...args); };
+  for (let i = 0; i < 100; i++) {
+    user.append(page.document.createElement('span'));
+    page.advanceTime(100);
+  }
+  assert.equal(scans, 0);
+});
+
+test('pauses discovery when hidden or disabled and catches up when re-enabled', async () => {
+  const page = createPage('block', { deferTimers: true });
+  page.flushTimers();
+  await page.setHidden(true);
+  assert.equal(page.activeObservers(), 0);
+  assert.equal(page.pendingTimerCount(), 0);
+  const tweet = page.document.querySelector('article[data-testid="tweet"]');
+  tweet.querySelector('.hajb-account-action-btn').remove();
+  await page.setHidden(false);
+  page.flushTimers();
+  assert.ok(tweet.querySelector('.hajb-account-action-btn'));
+  page.emitSettingChange('hajbEnabled', false);
+  assert.equal(page.activeObservers(), 0);
+  page.emitSettingChange('hajbEnabled', true);
+  page.flushTimers();
+  assert.equal(page.activeObservers(), 1);
+});
+
+test('discards detached tweets before pending injection', () => {
+  const page = createPage('block', { deferTimers: true });
+  const tweet = page.document.querySelector('article[data-testid="tweet"]');
+  tweet.remove();
+  page.flushTimers();
+  assert.equal(tweet.querySelector('.hajb-action-btn'), null);
+});
+
+test('large timelines yield between batches and still receive exactly two controls each', () => {
+  const page = createPage('block', { deferTimers: true, tweetCount: 1000 });
+  page.advanceTime(32);
+  const firstBatch = page.document.querySelectorAll('.hajb-action-btn').length;
+  assert.ok(firstBatch > 0 && firstBatch <= 40);
+  page.flushTimers();
+  assert.equal(page.document.querySelectorAll('.hajb-action-btn').length, 2000);
+  assert.equal(page.pendingTimerCount(), 0);
+});
+
+test('a resolved menu wait releases its observer and timeout immediately', async () => {
+  const page = createPage('mute', { deferTimers: true });
+  page.flushTimers();
+  page.document.querySelector('[data-testid="caret"]').onClick = () => {};
+  const action = page.document.body.dispatchEvent({
+    type: 'click', target: page.document.querySelector('.hajb-account-action-btn'),
+    preventDefault() {}, stopPropagation() {}
+  });
+  const menu = page.document.createElement('div');
+  menu.setAttribute('data-testid', 'Dropdown');
+  const item = page.document.createElement('button');
+  item.setAttribute('role', 'menuitem');
+  item.textContent = 'Mute @alice';
+  menu.append(item);
+  page.document.body.append(menu);
+  await action;
+  assert.equal(page.activeObservers(), 1);
+  assert.equal(page.pendingTimerCount(), 0);
+});
+
+test('a burst larger than the pending queue is fully recovered without duplicate controls', () => {
+  const page = createPage('block', { deferTimers: true });
+  page.flushTimers();
+  for (let i = 0; i < 600; i++) {
+    const tweet = page.document.createElement('article');
+    tweet.setAttribute('data-testid', 'tweet');
+    const caret = page.document.createElement('button');
+    caret.setAttribute('data-testid', 'caret');
+    tweet.append(caret);
+    page.document.body.append(tweet);
+  }
+  page.flushTimers();
+  assert.equal(page.document.querySelectorAll('.hajb-action-btn').length, 1202);
+  assert.equal(page.pendingTimerCount(), 0);
+});
+
+test('replacing the entire action bar restores controls without retaining the old bar', () => {
+  const page = createPage('block', { deferTimers: true });
+  page.flushTimers();
+  const tweet = page.document.querySelector('article[data-testid="tweet"]');
+  tweet.querySelector('.actions').remove();
+  const bar = page.document.createElement('div');
+  const caret = page.document.createElement('button');
+  caret.setAttribute('data-testid', 'caret');
+  bar.append(caret);
+  tweet.append(bar);
+  page.flushTimers();
+  assert.equal(tweet.querySelectorAll('.hajb-action-btn').length, 2);
 });

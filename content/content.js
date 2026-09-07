@@ -42,6 +42,7 @@ const matchesActionText = (textContent, actionType) => {
 
 const applyActionPresentation = (button, actionType) => {
   const actionTypeValue = ACTION_PRESENTATION[actionType] ? actionType : 'block';
+  if (button.dataset.actionType === actionTypeValue) return;
   const presentation = ACTION_PRESENTATION[actionTypeValue];
   const label = chrome.i18n.getMessage(presentation.messageKey) || chrome.i18n.getMessage('extName') || 'One Click Block Twitter';
 
@@ -68,6 +69,7 @@ const Logger = {
 };
 
 // 2. Storage Manager
+let onSettingsUpdated = () => {};
 const Storage = (() => {
   let cachedSettings = {
     actionType: 'block',
@@ -87,17 +89,20 @@ const Storage = (() => {
   chrome.storage.local.get(cachedSettings, (data) => {
     cachedSettings = normalizeSettings(data);
     updateInjectedButtons(cachedSettings);
+    onSettingsUpdated();
   });
 
   // Listen for popup changes
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
+    if (!['actionType', 'hajbEnabled', 'accountActionEnabled', 'notInterestedEnabled'].some((key) => changes[key])) return;
 
     for (const key of ['actionType', 'hajbEnabled', 'accountActionEnabled', 'notInterestedEnabled']) {
       if (changes[key]) cachedSettings[key] = changes[key].newValue;
     }
     cachedSettings = normalizeSettings(cachedSettings);
     updateInjectedButtons(cachedSettings);
+    onSettingsUpdated();
   });
 
   const getSettings = () => cachedSettings; // Now synchronous and instant
@@ -118,19 +123,18 @@ const Automation = (() => {
     return new Promise((resolve) => {
       const el = parent.querySelector(selector);
       if (el) return resolve(el);
-
+      let timeoutId = null;
+      const finish = (found) => {
+        observer.disconnect();
+        if (timeoutId !== null) clearTimeout(timeoutId);
+        resolve(found);
+      };
       const observer = new MutationObserver(() => {
         const found = parent.querySelector(selector);
-        if (found) {
-          observer.disconnect();
-          resolve(found);
-        }
+        if (found) finish(found);
       });
       observer.observe(parent, { childList: true, subtree: true });
-      setTimeout(() => {
-        observer.disconnect();
-        resolve(null);
-      }, timeout);
+      timeoutId = setTimeout(() => finish(null), timeout);
     });
   };
 
@@ -204,6 +208,14 @@ const Automation = (() => {
 
 // 4. Mutator & Event Delegation
 const Mutator = (() => {
+  // Weak keys do not keep tweets removed by X alive.
+  const controls = new WeakMap();
+  const hasIntactControls = (tweet) => {
+    const cached = controls.get(tweet);
+    return cached && tweet.contains(cached.caret) &&
+      cached.caret.parentElement === cached.account.parentElement &&
+      cached.caret.parentElement === cached.dismiss.parentElement;
+  };
   const BUTTON_CLASS = 'hajb-action-btn';
   const ACCOUNT_BUTTON_CLASS = 'hajb-account-action-btn';
   const NOT_INTERESTED_BUTTON_CLASS = 'hajb-not-interested-btn';
@@ -221,6 +233,7 @@ const Mutator = (() => {
     const settings = Storage.getSettings();
     
     tweets.forEach(tweet => {
+      if (!document.body.contains(tweet) || hasIntactControls(tweet)) return;
       const caret = tweet.querySelector('[data-testid="caret"]');
       if (!caret?.parentElement) return;
 
@@ -238,6 +251,7 @@ const Mutator = (() => {
         caret.parentElement.insertBefore(notInterestedButton, caret);
       }
       notInterestedButton.hidden = !settings.hajbEnabled || !settings.notInterestedEnabled;
+      controls.set(tweet, { caret, account: accountButton, dismiss: notInterestedButton });
     });
   };
 
@@ -276,56 +290,106 @@ const Mutator = (() => {
     }
   });
 
-  return { injectTweetButtons };
+  return { injectTweetButtons, hasIntactControls };
 })();
 
 // 5. Observer
 const Observer = (() => {
   let observer = null;
-  let debounceTimer = null;
-  let pendingTweets = new Set();
-
-  const handleMutations = (mutations) => {
-    const collectContainingTweet = (node) => {
-      if (!node || typeof node.closest !== 'function') return;
-
-      const parentTweet = node.closest('article[data-testid="tweet"]');
-      if (parentTweet) pendingTweets.add(parentTweet);
-    };
-
-    const collectAddedTweets = (node) => {
-      collectContainingTweet(node);
-
-      if (typeof node.querySelectorAll === 'function') {
-        node.querySelectorAll('article[data-testid="tweet"]').forEach((tweet) => pendingTweets.add(tweet));
-      }
-    };
-
-    for (const mutation of mutations) {
-      collectContainingTweet(mutation.target);
-      mutation.addedNodes.forEach(collectAddedTweets);
-    }
-
-    if (pendingTweets.size > 0 && debounceTimer === null) {
-      debounceTimer = setTimeout(() => {
-        debounceTimer = null;
-        const tweetsToUpdate = pendingTweets;
-        pendingTweets = new Set();
-        Mutator.injectTweetButtons(tweetsToUpdate);
-      }, 100); 
-    }
+  let timer = null;
+  let active = false;
+  const pendingTweets = new Set();
+  let scan = null;
+  let needsScan = false;
+  const TWEET = 'article[data-testid="tweet"]';
+  const enabled = () => {
+    const settings = Storage.getSettings();
+    return !document.hidden && settings.hajbEnabled &&
+      (settings.accountActionEnabled || settings.notInterestedEnabled);
   };
 
+  const schedule = () => {
+    if (timer !== null || !active) return;
+    // Set a sentinel first; also supports synchronous timer test harnesses.
+    timer = -1;
+    const id = setTimeout(() => { timer = null; flush(); }, 32);
+    if (timer === -1) timer = id;
+  };
+
+  const flush = () => {
+    if (!active) return;
+    if (needsScan && !scan) {
+      needsScan = false;
+      scan = document.querySelectorAll(TWEET)[Symbol.iterator]();
+    }
+    const batch = [];
+    // Bound DOM work per task so large timelines yield to input and painting.
+    for (let count = 0; count < 20; count++) {
+      let tweet;
+      if (pendingTweets.size) {
+        tweet = pendingTweets.values().next().value;
+        pendingTweets.delete(tweet);
+      } else if (scan) {
+        const next = scan.next();
+        if (next.done) { scan = null; break; }
+        tweet = next.value;
+      } else break;
+      if (document.body.contains(tweet) && !Mutator.hasIntactControls(tweet)) batch.push(tweet);
+    }
+    Mutator.injectTweetButtons(batch);
+    if (pendingTweets.size || scan || needsScan) schedule();
+  };
+
+  const collect = (tweet) => {
+    if (!tweet || Mutator.hasIntactControls(tweet)) return;
+    if (pendingTweets.size < 256) pendingTweets.add(tweet);
+    else needsScan = true;
+  };
+
+  const handleMutations = (mutations) => {
+    if (!active) return;
+    for (const mutation of mutations) {
+      if (mutation.addedNodes.length && !mutation.removedNodes?.length &&
+          Array.from(mutation.addedNodes).every((node) => node.matches?.('.hajb-action-btn'))) continue;
+      const target = mutation.target;
+      if (target.closest?.('.hajb-action-btn')) continue;
+      const tweet = target.closest?.(TWEET);
+      if (tweet) { collect(tweet); continue; }
+      for (const node of mutation.addedNodes) {
+        if (node.matches?.(TWEET)) collect(node);
+        else if (node.querySelectorAll && node.children.length) {
+          node.querySelectorAll(TWEET).forEach(collect);
+        }
+      }
+    }
+    if (pendingTweets.size || needsScan) schedule();
+  };
+
+  const stop = () => {
+    active = false;
+    observer?.disconnect();
+    if (timer !== null) clearTimeout(timer);
+    timer = null;
+    pendingTweets.clear();
+    scan = null;
+    needsScan = false;
+  };
+  const sync = () => {
+    if (!enabled()) { stop(); return; }
+    if (active) return;
+    active = true;
+    needsScan = true;
+    observer.observe(document.body, { childList: true, subtree: true });
+    schedule();
+  };
   const start = () => {
     if (observer) return;
-    setTimeout(() => {
-      const tweets = document.querySelectorAll('article[data-testid="tweet"]');
-      if (tweets.length > 0) Mutator.injectTweetButtons(tweets);
-    }, 500);
-
     observer = new MutationObserver(handleMutations);
-    observer.observe(document.body, { childList: true, subtree: true });
-    Logger.info('Observer started with event delegation');
+    onSettingsUpdated = sync;
+    document.addEventListener('visibilitychange', sync);
+    globalThis.addEventListener?.('pagehide', stop);
+    globalThis.addEventListener?.('pageshow', sync);
+    sync();
   };
 
   return { start };
