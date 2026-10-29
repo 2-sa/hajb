@@ -5,7 +5,11 @@
 - `firefox-screenshot.png`: Manage blocking, muting, and “Not interested” controls, and view your action counts—all stored locally.
 - `firefox-timeline.png`: Block or mute accounts and dismiss unwanted posts directly from your X timeline with one click.
 
-## Release notes — 3.1.4
+## Release notes — 3.1.5
+
+Updated the extension name to “One Click Block for X / Twitter.” Refreshed the English and Arabic descriptions to include automatic tracking removal from copied post links. No changes to functionality or permissions in this version.
+
+## Previous release — 3.1.4
 
 Added automatic tracking removal when copying X/Twitter post links, including through “Copy link.” Tracking parameters are removed while other URL parameters are preserved.
 
@@ -21,11 +25,11 @@ Settings and action counters are stored locally. The extension does not collect 
 
 To reproduce the extension package from source:
 
-1. Check out tag `v3.1.4` at https://github.com/2-sa/hajb.
+1. Check out tag `v3.1.5` at https://github.com/2-sa/hajb.
 2. From the repository root, run:
 
    ```sh
-   zip -r hajb-v3.1.4.zip manifest.json background.js content popup icons _locales
+   zip -r hajb-v3.1.5.zip manifest.json background.js content popup icons _locales
    ```
 
 This packages the source files directly, using the same file selection as the release workflow. Store screenshots and listing text are excluded from the extension package.

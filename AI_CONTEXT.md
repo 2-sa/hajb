@@ -1,4 +1,4 @@
-# One Click Block Twitter Engineering Context
+# One Click Block for X / Twitter Engineering Context
 
 > **Note to future maintainers:** Read this file before modifying the extension. It explains the performance and stability constraints behind One Click Block Twitter's implementation.
 
@@ -55,4 +55,14 @@ Discovery processes at most 20 queued/scanned tweets per scheduled task with a 3
 Ignore unrelated storage events (especially actionStats). Do not rebuild unchanged button SVGs. Successful menu waits must cancel their timeout as well as disconnecting their temporary observer.
 
 ---
-**Summary for AI:** Maintain the zero-latency philosophy. If you add features, ensure they are O(1) in complexity during scroll events and do not rely on asynchronous I/O unless absolutely necessary.
+### 11. Statistics queue and link cleaning
+
+Counter resets use `HAJB_RESET_STATS` through the same background queue as action updates. Failed operations must not poison subsequent writes. The popup renders statistics from storage changes instead of overwriting them with a potentially stale reset response.
+
+`content/clean-url.js` runs in the MAIN world at document_start to wrap page Clipboard API writes and handle legacy copy events. It removes only known tracking parameters from supported post URLs, never reads the system clipboard, and runs independently of timeline switches.
+
+### 12. Action completion limitation
+
+The automation currently treats completion of menu/confirmation clicks as success, without verifying server acceptance. Do not describe the counters as server-confirmed results.
+
+**Summary for maintainers:** Keep timeline work bounded and avoid storage I/O in mutation handling. Catch-up scans still scale with the current DOM. Run regression tests after behavior changes.
