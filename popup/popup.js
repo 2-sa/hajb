@@ -104,10 +104,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  elements.resetStats.addEventListener('click', () => {
-    state.actionStats = { ...EMPTY_ACTION_STATS };
-    renderStats(state.actionStats);
-    chrome.storage.local.set({ actionStats: state.actionStats });
+  elements.resetStats.addEventListener('click', async () => {
+    elements.resetStats.disabled = true;
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'HAJB_RESET_STATS' });
+      if (!response?.ok) throw new Error(response?.error || 'Stats reset failed');
+      // storage.onChanged supplies the counters, including newer queued actions.
+    } catch (error) {
+      console.error(`Stats reset failed: ${error.message}`);
+    } finally {
+      elements.resetStats.disabled = false;
+    }
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {

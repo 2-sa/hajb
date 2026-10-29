@@ -25,12 +25,12 @@ function createElement(value = '') {
       listeners.set(type, listener);
     },
     dispatch(type) {
-      listeners.get(type)?.();
+      return listeners.get(type)?.();
     }
   };
 }
 
-function runPopup(uiLanguage = 'en-US', stored = {}) {
+function runPopup(uiLanguage = 'en-US', stored = {}, { resetFails = false } = {}) {
   const actionInputs = [createElement('block'), createElement('mute')];
   const ids = Object.fromEntries([
     'hajbEnabled',
@@ -50,6 +50,7 @@ function runPopup(uiLanguage = 'en-US', stored = {}) {
   ].map((id) => [id, createElement()]));
   const documentElement = { lang: 'ar', dir: 'rtl' };
   const savedSettings = [];
+  const runtimeMessages = [];
   const changeListeners = [];
   let requestedDefaults;
 
@@ -73,6 +74,16 @@ function runPopup(uiLanguage = 'en-US', stored = {}) {
     pausedFooterStatus: 'Paused locally'
   };
   const chrome = {
+    runtime: {
+      async sendMessage(message) {
+        runtimeMessages.push(message);
+        if (resetFails) throw new Error('Storage unavailable');
+        changeListeners.forEach((listener) => listener({ actionStats: {
+          newValue: { block: 0, mute: 0, notInterested: 0 }
+        } }, 'local'));
+        return { ok: true };
+      }
+    },
     i18n: {
       getMessage(key) { return messages[key] ?? ''; },
       getUILanguage() { return uiLanguage; }
@@ -95,13 +106,14 @@ function runPopup(uiLanguage = 'en-US', stored = {}) {
     }
   };
 
-  vm.runInNewContext(popupScript, { chrome, document, Intl });
+  vm.runInNewContext(popupScript, { chrome, document, Intl, console: { error() {} } });
   return {
     actionInputs,
     documentElement,
     elements: ids,
     requestedDefaults,
     savedSettings,
+    runtimeMessages,
     emitStorageChange(changes, area = 'local') {
       changeListeners.forEach((listener) => listener(changes, area));
     }
@@ -155,7 +167,7 @@ test('the master switch pauses every timeline control without forgetting prefere
   assert.equal(popup.elements.masterStatus.textContent, 'Paused');
 });
 
-test('renders live action stats and resets them locally', () => {
+test('renders live action stats and resets through the background queue', async () => {
   const popup = runPopup('en-US', {
     actionStats: { block: 12, mute: 3, notInterested: 29 }
   });
@@ -170,11 +182,18 @@ test('renders live action stats and resets them locally', () => {
   });
   assert.equal(popup.elements.totalCount.textContent, '46');
 
-  popup.elements.resetStats.dispatch('click');
-  assert.equal(JSON.stringify(popup.savedSettings.at(-1)), JSON.stringify({
-    actionStats: { block: 0, mute: 0, notInterested: 0 }
-  }));
+  await popup.elements.resetStats.dispatch('click');
+  assert.equal(popup.savedSettings.length, 0);
+  assert.equal(popup.runtimeMessages[0].type, 'HAJB_RESET_STATS');
   assert.equal(popup.elements.totalCount.textContent, '0');
+});
+
+test('failed reset preserves displayed counters and re-enables the reset button', async () => {
+  const popup = runPopup('en-US', { actionStats: { block: 5 } }, { resetFails: true });
+  await popup.elements.resetStats.dispatch('click');
+  assert.equal(popup.elements.totalCount.textContent, '5');
+  assert.equal(popup.elements.resetStats.disabled, false);
+  assert.equal(popup.savedSettings.length, 0);
 });
 
 test('uses the Arabic fallback direction for unsupported browser locales', () => {

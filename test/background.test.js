@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 const backgroundScript = await readFile(new URL('../background.js', import.meta.url), 'utf8');
 
-function runBackground(initialStats = {}) {
+function runBackground(initialStats = {}, { failWrites = 0 } = {}) {
   let actionStats = initialStats;
   let messageListener;
   const chrome = {
@@ -22,6 +22,7 @@ function runBackground(initialStats = {}) {
           return { ...defaults, actionStats };
         },
         async set(values) {
+          if (failWrites-- > 0) throw new Error('Storage unavailable');
           actionStats = values.actionStats;
         }
       }
@@ -60,4 +61,28 @@ test('ignores unknown messages and action types', () => {
   const background = runBackground();
   assert.equal(background.sendInvalid({ type: 'OTHER' }), false);
   assert.equal(background.sendInvalid({ type: 'HAJB_RECORD_ACTION', actionType: 'report' }), false);
+  assert.equal(background.sendInvalid({ type: 'HAJB_RECORD_ACTION', actionType: 'toString' }), false);
+});
+
+test('recovers queued writes after a storage failure', async () => {
+  const background = runBackground({ block: 4 }, { failWrites: 1 });
+  const [failed, recovered] = await Promise.all([
+    background.send({ type: 'HAJB_RECORD_ACTION', actionType: 'block' }),
+    background.send({ type: 'HAJB_RECORD_ACTION', actionType: 'mute' })
+  ]);
+  assert.equal(failed.ok, false);
+  assert.equal(recovered.ok, true);
+  assert.equal(background.getStats().block, 4);
+  assert.equal(background.getStats().mute, 1);
+});
+
+test('orders resets between concurrent action updates', async () => {
+  const background = runBackground({ block: 10, mute: 2 });
+  const results = await Promise.all([
+    background.send({ type: 'HAJB_RECORD_ACTION', actionType: 'block' }),
+    background.send({ type: 'HAJB_RESET_STATS' }),
+    background.send({ type: 'HAJB_RECORD_ACTION', actionType: 'mute' })
+  ]);
+  assert.ok(results.every((result) => result.ok));
+  assert.equal(JSON.stringify(background.getStats()), JSON.stringify({ block: 0, mute: 1, notInterested: 0 }));
 });

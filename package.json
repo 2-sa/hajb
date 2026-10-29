@@ -8,6 +8,6 @@
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "check": "node --check content/content.js && node --check popup/popup.js && node scripts/validate-extension.mjs"
+    "check": "node --check content/content.js && node --check content/clean-url.js && node --check popup/popup.js && node scripts/validate-extension.mjs"
   }
 }
