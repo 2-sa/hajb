@@ -1,7 +1,7 @@
 {
-  "extName": { "message": "One Click Block Twitter" },
+  "extName": { "message": "One Click Block for X / Twitter" },
   "extShortName": { "message": "1ClickBlock" },
-  "extDescription": { "message": "Take control of your timeline: block, mute, or dismiss X posts in one tap, locally and without tracking." },
+  "extDescription": { "message": "Block or mute accounts, dismiss unwanted posts, and clean tracking from copied X/Twitter post links. Local settings, no data collection." },
   "brandTagline": { "message": "Your timeline. Your call." },
   "modeEyebrow": { "message": "One-tap mode" },
   "actionTypeLabel": { "message": "What should one tap do?" },

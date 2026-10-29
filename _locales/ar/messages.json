@@ -1,7 +1,7 @@
 {
-  "extName": { "message": "One Click Block Twitter" },
+  "extName": { "message": "One Click Block for X / Twitter" },
   "extShortName": { "message": "1ClickBlock" },
-  "extDescription": { "message": "تحكّم سريع في خطّك الزمني: احظر أو اكتم أو أخفِ منشورات X بنقرة واحدة، محليًا ومن دون تتبع." },
+  "extDescription": { "message": "احظر أو اكتم الحسابات وأخفِ المنشورات ونظّف روابط X وتويتر من التتبع عند النسخ. إعدادات محلية بلا جمع بيانات." },
   "brandTagline": { "message": "خطّك الزمني، بقرارك." },
   "modeEyebrow": { "message": "وضع النقرة الواحدة" },
   "actionTypeLabel": { "message": "ماذا تنفّذ النقرة؟" },
