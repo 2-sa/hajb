@@ -15,7 +15,7 @@
     notInterestedEnabled: true
   });
   const NON_CONTAINER_TAGS = new Set([
-    'SPAN', 'A', 'IMG', 'SVG', 'PATH', 'VIDEO', 'AUDIO', 'BUTTON',
+    'SPAN', 'A', 'IMG', 'VIDEO', 'AUDIO', 'BUTTON',
     'INPUT', 'TEXTAREA', 'P', 'TIME', 'BR', 'HR', 'SCRIPT', 'STYLE',
     'LINK', 'META', 'SOURCE', 'TRACK', 'CANVAS', 'IFRAME'
   ]);
@@ -124,7 +124,7 @@
     };
 
     chrome.storage.local.get(DEFAULT_SETTINGS, (data) => {
-      cachedSettings = normalizeSettings(data);
+      cachedSettings = chrome.runtime?.lastError ? { ...DEFAULT_SETTINGS } : normalizeSettings(data);
       storageReady = true;
       onStorageReady();
     });
@@ -531,7 +531,7 @@
           if (node.nodeType !== 1) continue;
           if (node.matches?.(TWEET)) {
             collect(node, settings);
-          } else if (!NON_CONTAINER_TAGS.has(node.tagName) && node.children?.length) {
+          } else if (node.namespaceURI !== SVG_NS && !NON_CONTAINER_TAGS.has(node.tagName) && node.children?.length) {
             const tweets = node.querySelectorAll?.(TWEET);
             if (tweets) {
               for (let k = 0; k < tweets.length; k++) collect(tweets[k], settings);

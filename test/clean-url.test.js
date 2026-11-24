@@ -74,8 +74,8 @@ test('cleans explicit copy data and leaves unrelated copy behavior untouched', (
 
 test('cleans pro.x.com, pro.twitter.com, and uppercase X post links', async () => {
   const { clipboard, writes } = setup();
-  await clipboard.writeText('https://pro.x.com/alice/status/123?s=20 https://pro.twitter.com/bob/status/456?t=xyz HTTPS://X.COM/carol/status/789?utm_source=x');
-  assert.equal(writes[0], 'https://pro.x.com/alice/status/123 https://pro.twitter.com/bob/status/456 https://x.com/carol/status/789');
+  await clipboard.writeText('https://pro.x.com/alice/status/123?s=20 https://pro.twitter.com/bob/status/456?t=xyz HTTPS://X.COM/CAROL/STATUS/789?S=20&UTM_SOURCE=X HTTPS://PRO.X.COM/I/WEB/STATUS/101?T=ABC');
+  assert.equal(writes[0], 'https://pro.x.com/alice/status/123 https://pro.twitter.com/bob/status/456 https://x.com/CAROL/STATUS/789 https://pro.x.com/I/WEB/STATUS/101');
 });
 
 test('bails out without URL parsing for non-matching text and parses each candidate at most once', async () => {

@@ -3,7 +3,7 @@
   const URL_PATTERN = /https?:\/\/[^\s<>"']+/gi;
   const FAST_HOST_HINT = /(?:x|twitter)\.com/i;
   const SUPPORTED_HOST = /^(?:www\.|mobile\.|pro\.)?(?:x\.com|twitter\.com)$/i;
-  const SUPPORTED_POST_PATH = /^\/(?:[A-Za-z0-9_]+\/status|i\/web\/status)\/\d+(?:\/|$)/;
+  const SUPPORTED_POST_PATH = /^\/(?:[A-Za-z0-9_]+\/status|i\/web\/status)\/\d+(?:\/|$)/i;
   const TRACKING_PARAMS = new Set(['a', 's', 't', 'ref_src', 'ref_url']);
   const UTM_PARAM = /^utm_/i;
   const TEXT_INPUT_TAGS = /^(TEXTAREA|INPUT)$/;

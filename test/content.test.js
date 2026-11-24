@@ -8,7 +8,7 @@ const contentStyles = await readFile(new URL('../content/content.css', import.me
 
 class FakeElement {
   constructor(tagName, notifyMutation, rootRef, counters, namespaceURI = null) {
-    this.tagName = tagName.toUpperCase();
+    this.tagName = namespaceURI ? tagName : tagName.toUpperCase();
     this.nodeType = 1;
     this.namespaceURI = namespaceURI;
     this.children = [];
@@ -202,6 +202,7 @@ function createPage(actionType = 'block', {
   menuItemTexts = [],
   storedSettings = {},
   storageReturnsUndefined = false,
+  storageLastError = false,
   tweetCount = 1,
   withReactRoot = false,
   withLayers = false
@@ -212,7 +213,8 @@ function createPage(actionType = 'block', {
     innerHTMLWrites: 0,
     ownButtonClosestCalls: 0,
     userNameQueries: 0,
-    consoleLogs: 0
+    consoleLogs: 0,
+    lastErrorReads: 0
   };
   const rootRef = { body: null };
   const notifyMutation = (record) => {
@@ -325,6 +327,10 @@ function createPage(actionType = 'block', {
       }
     },
     runtime: {
+      get lastError() {
+        counters.lastErrorReads += 1;
+        return storageLastError ? { message: 'Storage read failed' } : undefined;
+      },
       sendMessage(message) {
         runtimeMessages.push(message);
         return Promise.resolve({ ok: true });
@@ -449,9 +455,9 @@ test('builds icons via createElementNS without innerHTML and caches i18n labels'
 
   assert.equal(page.counters.innerHTMLWrites, 0);
   assert.equal(button.tagName, 'BUTTON');
-  assert.equal(button.children[0].tagName, 'SVG');
+  assert.equal(button.children[0].tagName, 'svg');
   assert.equal(button.children[0].namespaceURI, 'http://www.w3.org/2000/svg');
-  assert.equal(button.children[0].children[0].tagName, 'PATH');
+  assert.equal(button.children[0].children[0].tagName, 'path');
   assert.equal(button.getAttribute('aria-label'), 'Block account with one tap');
   assert.equal(page.counters.i18nCalls, 2);
 
@@ -486,11 +492,20 @@ test('waits for initial storage read before starting observer or injecting butto
   assert.equal(mutePage.counters.i18nCalls, 2);
 });
 
-test('falls back to default settings if initial storage read yields undefined', () => {
-  const page = createPage('block', { storageReturnsUndefined: true });
-  assert.equal(page.activeObservers(), 1);
-  assert.ok(page.document.querySelector('.hajb-account-action-btn'));
-  assert.ok(page.document.querySelector('.hajb-not-interested-btn'));
+test('falls back to default settings if initial storage read yields undefined or sets runtime.lastError', () => {
+  const undefinedPage = createPage('block', { storageReturnsUndefined: true });
+  assert.equal(undefinedPage.activeObservers(), 1);
+  assert.ok(undefinedPage.document.querySelector('.hajb-account-action-btn'));
+  assert.ok(undefinedPage.document.querySelector('.hajb-not-interested-btn'));
+
+  const errorPage = createPage('block', {
+    storageLastError: true,
+    storedSettings: { hajbEnabled: false }
+  });
+  assert.ok(errorPage.counters.lastErrorReads >= 1, 'runtime.lastError must be checked in callback');
+  assert.equal(errorPage.activeObservers(), 1);
+  assert.ok(errorPage.document.querySelector('.hajb-account-action-btn'));
+  assert.ok(errorPage.document.querySelector('.hajb-not-interested-btn'));
 });
 
 test('only injects enabled buttons and removes disabled buttons from the DOM', () => {
@@ -577,6 +592,12 @@ test('scopes timeline observer to #react-root and skips leaf tags and own-button
   span.append(innerSpan);
   span.querySelectorAll = () => { leafQueryScans += 1; return []; };
   page.tweetContainer.append(span);
+
+  const svg = page.document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const svgPath = page.document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  svg.append(svgPath);
+  svg.querySelectorAll = () => { leafQueryScans += 1; return []; };
+  page.tweetContainer.append(svg);
 
   const outsidePortal = page.document.createElement('div');
   page.document.body.append(outsidePortal);
