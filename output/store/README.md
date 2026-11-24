@@ -2,10 +2,14 @@
 
 ## Screenshot captions — English (US)
 
-- `firefox-screenshot.png`: Manage blocking, muting, and “Not interested” controls, and view your action counts—all stored locally.
+- `firefox-screenshot.png`: Manage blocking, muting, and “Not interested” controls—all stored locally.
 - `firefox-timeline.png`: Block or mute accounts and dismiss unwanted posts directly from your X timeline with one click.
 
-## Release notes — 3.1.5
+## Release notes — 3.2.0
+
+Reduced memory and CPU usage across Chrome, Edge, and Firefox. Removed the background script and action counters so the extension runs with zero background process overhead, scoped content scripts strictly to X/Twitter web app hosts, removed disabled buttons from the DOM instead of keeping them hidden, replaced `innerHTML` icon rendering with cached `createElementNS` SVG templates, and tightened timeline observer filtering and click concurrency handling.
+
+## Previous release — 3.1.5
 
 Updated the extension name to “One Click Block for X / Twitter.” Refreshed the English and Arabic descriptions to include automatic tracking removal from copied post links. No changes to functionality or permissions in this version.
 
@@ -19,17 +23,17 @@ Fixed action statistics so a failed storage write no longer prevents subsequent 
 
 This extension uses plain JavaScript, HTML, and CSS. No build process, compilation, minification, or external dependencies are required. The submitted files are the executable source code.
 
-`content/clean-url.js` runs in the page’s MAIN world at `document_start` on X/Twitter pages. It intercepts clipboard text writes and copy events to remove known tracking parameters from post URLs. It does not read the system clipboard, transmit data, or require additional permissions.
+`content/clean-url.js` runs in the page’s MAIN world at `document_start` on explicit HTTPS X/Twitter app hosts. It intercepts clipboard text writes and copy events to remove known tracking parameters from post URLs. It does not read the system clipboard, transmit data, or require additional permissions.
 
-Settings and action counters are stored locally. The extension does not collect or transmit user data.
+Settings are stored locally using the `storage` permission. There is no background script or service worker, and the extension does not collect or transmit user data.
 
 To reproduce the extension package from source:
 
-1. Check out tag `v3.1.5` at https://github.com/2-sa/hajb.
+1. Check out tag `v3.2.0` at https://github.com/2-sa/hajb.
 2. From the repository root, run:
 
    ```sh
-   zip -r hajb-v3.1.5.zip manifest.json background.js content popup icons _locales
+   zip -r hajb-v3.2.0.zip manifest.json content popup icons _locales
    ```
 
 This packages the source files directly, using the same file selection as the release workflow. Store screenshots and listing text are excluded from the extension package.
