@@ -5,6 +5,9 @@ import vm from 'node:vm';
 
 const popupScript = await readFile(new URL('../popup/popup.js', import.meta.url), 'utf8');
 const popupMarkup = await readFile(new URL('../popup/popup.html', import.meta.url), 'utf8');
+const popupStyles = await readFile(new URL('../popup/popup.css', import.meta.url), 'utf8');
+const arLocale = JSON.parse(await readFile(new URL('../_locales/ar/messages.json', import.meta.url), 'utf8'));
+const enLocale = JSON.parse(await readFile(new URL('../_locales/en/messages.json', import.meta.url), 'utf8'));
 
 function createElement(value = '') {
   const listeners = new Map();
@@ -30,7 +33,7 @@ function createElement(value = '') {
   };
 }
 
-function runPopup(uiLanguage = 'en-US', stored = {}, { resetFails = false } = {}) {
+function runPopup(uiLanguage = 'en-US', stored = {}) {
   const actionInputs = [createElement('block'), createElement('mute')];
   const ids = Object.fromEntries([
     'hajbEnabled',
@@ -41,17 +44,12 @@ function runPopup(uiLanguage = 'en-US', stored = {}, { resetFails = false } = {}
     'signalRail',
     'masterStatus',
     'statusDot',
-    'footerStatus',
-    'resetStats',
-    'blockCount',
-    'muteCount',
-    'notInterestedCount',
-    'totalCount'
+    'footerStatus'
   ].map((id) => [id, createElement()]));
   const documentElement = { lang: 'ar', dir: 'rtl' };
   const savedSettings = [];
-  const runtimeMessages = [];
-  const changeListeners = [];
+  let onChangedRegistered = false;
+  let sendMessageCalled = false;
   let requestedDefaults;
 
   const document = {
@@ -60,7 +58,7 @@ function runPopup(uiLanguage = 'en-US', stored = {}, { resetFails = false } = {}
       if (type === 'DOMContentLoaded') listener();
     },
     getElementById(id) {
-      return ids[id];
+      return ids[id] ?? null;
     },
     querySelectorAll(selector) {
       if (selector === 'input[name="actionType"]') return actionInputs;
@@ -75,13 +73,9 @@ function runPopup(uiLanguage = 'en-US', stored = {}, { resetFails = false } = {}
   };
   const chrome = {
     runtime: {
-      async sendMessage(message) {
-        runtimeMessages.push(message);
-        if (resetFails) throw new Error('Storage unavailable');
-        changeListeners.forEach((listener) => listener({ actionStats: {
-          newValue: { block: 0, mute: 0, notInterested: 0 }
-        } }, 'local'));
-        return { ok: true };
+      sendMessage() {
+        sendMessageCalled = true;
+        return Promise.resolve({ ok: true });
       }
     },
     i18n: {
@@ -99,38 +93,38 @@ function runPopup(uiLanguage = 'en-US', stored = {}, { resetFails = false } = {}
         }
       },
       onChanged: {
-        addListener(listener) {
-          changeListeners.push(listener);
+        addListener() {
+          onChangedRegistered = true;
         }
       }
     }
   };
 
-  vm.runInNewContext(popupScript, { chrome, document, Intl, console: { error() {} } });
+  vm.runInNewContext(popupScript, { chrome, document, console: { error() {} } });
   return {
     actionInputs,
     documentElement,
     elements: ids,
     requestedDefaults,
     savedSettings,
-    runtimeMessages,
-    emitStorageChange(changes, area = 'local') {
-      changeListeners.forEach((listener) => listener(changes, area));
-    }
+    onChangedRegistered,
+    sendMessageCalled
   };
 }
 
-test('renders the One Click Block dashboard controls and three action counters', () => {
+test('renders the One Click Block dashboard controls without action counters', () => {
   assert.match(popupMarkup, /class="brand-name"[^>]*>ONE CLICK BLOCK</);
   assert.match(popupMarkup, /id="hajbEnabled"/);
   assert.match(popupMarkup, /id="accountActionEnabled"/);
   assert.match(popupMarkup, /id="notInterestedEnabled"/);
-  assert.match(popupMarkup, /id="blockCount"/);
-  assert.match(popupMarkup, /id="muteCount"/);
-  assert.match(popupMarkup, /id="notInterestedCount"/);
+  assert.match(popupMarkup, /id="accountButtonTitle"/);
+  assert.match(popupMarkup, /id="actionChoices"[^>]*aria-labelledby="accountButtonTitle"/);
+  assert.doesNotMatch(popupMarkup, /id="actionChoices"[^>]*aria-label=/);
+  assert.doesNotMatch(popupMarkup, /stats-section|blockCount|muteCount|notInterestedCount|totalCount|resetStats/);
+  assert.doesNotMatch(popupStyles, /min-height:\s*520px|\.stats-section|\.stats-strip/);
 });
 
-test('loads controls, uses the browser direction, and persists feature switches', () => {
+test('loads controls, uses the browser direction, persists switches, and avoids background messaging', () => {
   const popup = runPopup('en-US', {
     actionType: 'mute',
     accountActionEnabled: false
@@ -139,7 +133,14 @@ test('loads controls, uses the browser direction, and persists feature switches'
 
   assert.equal(popup.documentElement.lang, 'en');
   assert.equal(popup.documentElement.dir, 'ltr');
-  assert.equal(popup.requestedDefaults.hajbEnabled, true);
+  assert.deepEqual(Object.keys(popup.requestedDefaults).sort(), [
+    'accountActionEnabled',
+    'actionType',
+    'hajbEnabled',
+    'notInterestedEnabled'
+  ]);
+  assert.equal(popup.onChangedRegistered, false);
+  assert.equal(popup.sendMessageCalled, false);
   assert.equal(popup.elements.hajbEnabled.checked, true);
   assert.equal(popup.elements.accountActionEnabled.checked, false);
   assert.equal(muteInput.checked, true);
@@ -151,6 +152,10 @@ test('loads controls, uses the browser direction, and persists feature switches'
 
   assert.equal(JSON.stringify(popup.savedSettings.at(-1)), JSON.stringify({ accountActionEnabled: true }));
   assert.equal(blockInput.disabled, false);
+
+  blockInput.checked = true;
+  blockInput.dispatch('change');
+  assert.equal(JSON.stringify(popup.savedSettings.at(-1)), JSON.stringify({ actionType: 'block' }));
 });
 
 test('the master switch pauses every timeline control without forgetting preferences', () => {
@@ -165,39 +170,30 @@ test('the master switch pauses every timeline control without forgetting prefere
   assert.equal(popup.actionInputs.every((input) => input.disabled), true);
   assert.equal(popup.elements.signalRail.classList.contains('is-paused'), true);
   assert.equal(popup.elements.masterStatus.textContent, 'Paused');
-});
-
-test('renders live action stats and resets through the background queue', async () => {
-  const popup = runPopup('en-US', {
-    actionStats: { block: 12, mute: 3, notInterested: 29 }
-  });
-
-  assert.equal(popup.elements.blockCount.textContent, '12');
-  assert.equal(popup.elements.muteCount.textContent, '3');
-  assert.equal(popup.elements.notInterestedCount.textContent, '29');
-  assert.equal(popup.elements.totalCount.textContent, '44');
-
-  popup.emitStorageChange({
-    actionStats: { newValue: { block: 13, mute: 3, notInterested: 30 } }
-  });
-  assert.equal(popup.elements.totalCount.textContent, '46');
-
-  await popup.elements.resetStats.dispatch('click');
-  assert.equal(popup.savedSettings.length, 0);
-  assert.equal(popup.runtimeMessages[0].type, 'HAJB_RESET_STATS');
-  assert.equal(popup.elements.totalCount.textContent, '0');
-});
-
-test('failed reset preserves displayed counters and re-enables the reset button', async () => {
-  const popup = runPopup('en-US', { actionStats: { block: 5 } }, { resetFails: true });
-  await popup.elements.resetStats.dispatch('click');
-  assert.equal(popup.elements.totalCount.textContent, '5');
-  assert.equal(popup.elements.resetStats.disabled, false);
-  assert.equal(popup.savedSettings.length, 0);
+  assert.equal(popup.elements.footerStatus.textContent, 'Paused locally');
 });
 
 test('uses the Arabic fallback direction for unsupported browser locales', () => {
   const popup = runPopup('fr-FR');
   assert.equal(popup.documentElement.lang, 'ar');
   assert.equal(popup.documentElement.dir, 'rtl');
+});
+
+test('prunes stats and unused locale message keys from both locales', () => {
+  const removedKeys = [
+    'modeEyebrow',
+    'actionTypeLabel',
+    'privacyNote',
+    'statsEyebrow',
+    'statsTitle',
+    'resetStats',
+    'blockStat',
+    'muteStat',
+    'notInterestedStat',
+    'totalLabel'
+  ];
+  for (const key of removedKeys) {
+    assert.equal(Object.hasOwn(arLocale, key), false, `ar locale still contains ${key}`);
+    assert.equal(Object.hasOwn(enLocale, key), false, `en locale still contains ${key}`);
+  }
 });

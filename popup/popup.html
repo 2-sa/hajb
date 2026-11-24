@@ -35,7 +35,7 @@
             <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"></circle><path d="m6.4 6.4 11.2 11.2"></path></svg>
           </span>
           <div class="feature-copy">
-            <h2 data-i18n="accountButtonTitle">إجراء الحساب</h2>
+            <h2 id="accountButtonTitle" data-i18n="accountButtonTitle">إجراء الحساب</h2>
             <p data-i18n="accountButtonDescription">زر مباشر للحظر أو الكتم</p>
           </div>
           <label class="feature-switch" for="accountActionEnabled">
@@ -45,7 +45,7 @@
           </label>
         </div>
 
-        <div class="action-grid" id="actionChoices" role="radiogroup" aria-label="إجراء الحساب">
+        <div class="action-grid" id="actionChoices" role="radiogroup" aria-labelledby="accountButtonTitle">
           <label class="action-option action-option--block">
             <input type="radio" name="actionType" value="block">
             <span class="action-card"><span data-i18n="blockAction">حظر</span></span>
@@ -73,32 +73,6 @@
           </label>
         </div>
       </article>
-    </section>
-
-    <section class="dashboard-section stats-section" aria-labelledby="statsTitle">
-      <div class="section-heading section-heading--stats">
-        <div>
-          <span class="eyebrow" data-i18n="statsEyebrow">منذ التثبيت</span>
-          <h1 id="statsTitle" data-i18n="statsTitle">أثر One Click Block</h1>
-        </div>
-        <button class="reset-button" id="resetStats" type="button" data-i18n="resetStats">تصفير</button>
-      </div>
-
-      <div class="stats-strip" aria-live="polite">
-        <div class="stat stat--block">
-          <strong id="blockCount">0</strong>
-          <span data-i18n="blockStat">حظر</span>
-        </div>
-        <div class="stat stat--mute">
-          <strong id="muteCount">0</strong>
-          <span data-i18n="muteStat">كتم</span>
-        </div>
-        <div class="stat stat--interest">
-          <strong id="notInterestedCount">0</strong>
-          <span data-i18n="notInterestedStat">غير مهتم</span>
-        </div>
-      </div>
-      <p class="total-line"><span data-i18n="totalLabel">إجمالي القرارات</span><strong id="totalCount">0</strong></p>
     </section>
 
     <footer class="privacy-note">

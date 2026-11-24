@@ -27,7 +27,6 @@ button,
 input { font: inherit; }
 
 .panel {
-  min-height: 520px;
   position: relative;
   isolation: isolate;
   animation: panel-settle 180ms ease-out both;
@@ -106,7 +105,6 @@ input { font: inherit; }
 .switch-input:focus-visible + .switch-track { outline: 2px solid var(--saffron); outline-offset: 3px; }
 
 .dashboard-section { padding: 15px 18px; }
-.controls-section { border-bottom: 1px solid var(--line); }
 .section-heading { margin-bottom: 10px; }
 .section-heading h1 { margin: 0; font-size: 14px; font-weight: 700; }
 .eyebrow {
@@ -168,39 +166,6 @@ input { font: inherit; }
 .action-option--mute input:checked + .action-card { border-color: var(--mint); background: rgba(94, 208, 184, 0.11); color: var(--mint); }
 .action-option input:focus-visible + .action-card { outline: 2px solid var(--saffron); outline-offset: 2px; }
 .action-option input:disabled + .action-card { cursor: not-allowed; opacity: 0.45; }
-
-.stats-section { padding-top: 14px; padding-bottom: 13px; background: rgba(17, 20, 41, 0.34); }
-.section-heading--stats { display: flex; align-items: end; justify-content: space-between; }
-.reset-button {
-  padding: 4px 7px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 9px;
-  cursor: pointer;
-}
-.reset-button:hover,
-.reset-button:focus-visible { color: var(--mist); background: rgba(247, 244, 235, 0.07); outline: none; }
-
-.stats-strip {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--ink-deep);
-}
-.stat { position: relative; padding: 11px 9px 10px; text-align: center; }
-.stat + .stat { border-inline-start: 1px solid var(--line); }
-.stat::before { content: ""; position: absolute; inset: 0 0 auto; height: 2px; background: currentColor; }
-.stat strong { display: block; color: var(--mist); font: 700 22px/1 "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; }
-.stat span { display: block; margin-top: 5px; color: var(--slate); font-size: 9px; }
-.stat--block { color: var(--coral); }
-.stat--mute { color: var(--mint); }
-.stat--interest { color: var(--sky); }
-.total-line { display: flex; justify-content: space-between; margin: 8px 2px 0; color: var(--muted); font-size: 9px; }
-.total-line strong { color: var(--saffron); font: 700 10px/1 ui-monospace, Consolas, monospace; }
 
 .privacy-note {
   display: flex;

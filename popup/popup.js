@@ -1,16 +1,13 @@
 document.addEventListener('DOMContentLoaded', () => {
-  const EMPTY_ACTION_STATS = { block: 0, mute: 0, notInterested: 0 };
   const DEFAULT_SETTINGS = {
     actionType: 'block',
     hajbEnabled: true,
     accountActionEnabled: true,
-    notInterestedEnabled: true,
-    actionStats: EMPTY_ACTION_STATS
+    notInterestedEnabled: true
   };
 
   const requestedLanguage = (chrome.i18n.getUILanguage?.() || 'ar').split('-')[0].toLowerCase();
   const uiLanguage = requestedLanguage === 'en' ? 'en' : 'ar';
-  const numberFormatter = new Intl.NumberFormat(uiLanguage);
   document.documentElement.lang = uiLanguage;
   document.documentElement.dir = uiLanguage === 'ar' ? 'rtl' : 'ltr';
 
@@ -28,30 +25,10 @@ document.addEventListener('DOMContentLoaded', () => {
     signalRail: document.getElementById('signalRail'),
     masterStatus: document.getElementById('masterStatus'),
     statusDot: document.getElementById('statusDot'),
-    footerStatus: document.getElementById('footerStatus'),
-    resetStats: document.getElementById('resetStats'),
-    blockCount: document.getElementById('blockCount'),
-    muteCount: document.getElementById('muteCount'),
-    notInterestedCount: document.getElementById('notInterestedCount'),
-    totalCount: document.getElementById('totalCount')
+    footerStatus: document.getElementById('footerStatus')
   };
   const actionInputs = [...document.querySelectorAll('input[name="actionType"]')];
-  let state = { ...DEFAULT_SETTINGS, actionStats: { ...EMPTY_ACTION_STATS } };
-
-  const normalizeStats = (stats = {}) => Object.fromEntries(
-    Object.keys(EMPTY_ACTION_STATS).map((key) => [
-      key,
-      Number.isSafeInteger(stats[key]) && stats[key] >= 0 ? stats[key] : 0
-    ])
-  );
-
-  const renderStats = (stats) => {
-    const normalized = normalizeStats(stats);
-    elements.blockCount.textContent = numberFormatter.format(normalized.block);
-    elements.muteCount.textContent = numberFormatter.format(normalized.mute);
-    elements.notInterestedCount.textContent = numberFormatter.format(normalized.notInterested);
-    elements.totalCount.textContent = numberFormatter.format(Object.values(normalized).reduce((sum, count) => sum + count, 0));
-  };
+  let state = { ...DEFAULT_SETTINGS };
 
   const renderControls = () => {
     const active = state.hajbEnabled !== false;
@@ -85,11 +62,9 @@ document.addEventListener('DOMContentLoaded', () => {
     state = {
       ...DEFAULT_SETTINGS,
       ...data,
-      actionType: data.actionType === 'mute' ? 'mute' : 'block',
-      actionStats: normalizeStats(data.actionStats)
+      actionType: data?.actionType === 'mute' ? 'mute' : 'block'
     };
     renderControls();
-    renderStats(state.actionStats);
   });
 
   for (const key of ['hajbEnabled', 'accountActionEnabled', 'notInterestedEnabled']) {
@@ -102,26 +77,5 @@ document.addEventListener('DOMContentLoaded', () => {
       state.actionType = input.value;
       chrome.storage.local.set({ actionType: input.value });
     });
-  });
-
-  elements.resetStats.addEventListener('click', async () => {
-    elements.resetStats.disabled = true;
-    try {
-      const response = await chrome.runtime.sendMessage({ type: 'HAJB_RESET_STATS' });
-      if (!response?.ok) throw new Error(response?.error || 'Stats reset failed');
-      // storage.onChanged supplies the counters, including newer queued actions.
-    } catch (error) {
-      console.error(`Stats reset failed: ${error.message}`);
-    } finally {
-      elements.resetStats.disabled = false;
-    }
-  });
-
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local') return;
-    if (changes.actionStats) {
-      state.actionStats = normalizeStats(changes.actionStats.newValue);
-      renderStats(state.actionStats);
-    }
   });
 });
