@@ -54,7 +54,7 @@ A full audit of v3.1.5 established two concrete facts:
 - **Event delegation:** keep a single delegated click listener on `document.body`; never attach per-button listeners.
 - **Synchronous cached settings:** never call async `chrome.storage.local.get` inside mutation handlers or click handlers.
 - **No `innerHTML` in `content/content.js`:** construct SVG templates once via `document.createElementNS` and clone with `cloneNode(true)`.
-- **Version:** do not bump extension version (`3.1.5`) unless requested during release preparation (agent call; easy to adjust if the user wants a version bump later).
+- **Version:** bump extension version from `3.1.5` to `3.2.0` in both `manifest.json` and `package.json` (and update version references in `README.md` and `output/store/README.md`) per user request.
 
 ---
 
