@@ -34,7 +34,7 @@ jobs:
       - name: Package extension
         run: |
           mkdir -p dist
-          zip -r "dist/hajb-${GITHUB_REF_NAME}.zip" manifest.json background.js content popup icons _locales
+          zip -r "dist/hajb-${GITHUB_REF_NAME}.zip" manifest.json content popup icons _locales
           unzip -t "dist/hajb-${GITHUB_REF_NAME}.zip"
       - name: Publish GitHub release
         env:

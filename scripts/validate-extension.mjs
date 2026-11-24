@@ -32,6 +32,16 @@ const locales = Object.fromEntries(await Promise.all(localeNames.map(async (loca
 invariant(manifest.manifest_version === 3, 'Only Manifest V3 is supported');
 invariant(manifest.version === packageJson.version, 'manifest.json and package.json versions must match');
 invariant(!manifest.host_permissions, 'Static content scripts do not need duplicate host_permissions');
+invariant(!manifest.background, 'Extension must not declare a background script or service worker');
+for (const script of manifest.content_scripts ?? []) {
+  invariant(Array.isArray(script.matches) && script.matches.length > 0, 'Each content script must declare explicit matches');
+  for (const pattern of script.matches) {
+    invariant(
+      /^https:\/\/[a-z0-9.-]+\/\*$/.test(pattern) && !pattern.includes('*.'),
+      `Content script match pattern must be an explicit HTTPS host: ${pattern}`
+    );
+  }
+}
 invariant(
   manifest.browser_specific_settings?.gecko?.data_collection_permissions?.required?.[0] === 'none',
   'Firefox data collection disclosure must explicitly declare none'
