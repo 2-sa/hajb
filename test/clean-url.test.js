@@ -7,6 +7,13 @@ const script = await readFile(new URL('../content/clean-url.js', import.meta.url
 function setup({ selection = '', activeElement = null, clipboardAvailable = true } = {}) {
   const writes = [];
   const listeners = {};
+  let urlParseCount = 0;
+  class CountingURL extends URL {
+    constructor(...args) {
+      urlParseCount += 1;
+      super(...args);
+    }
+  }
   const clipboard = clipboardAvailable ? {
     writeText(text) {
       assert.equal(this, clipboard);
@@ -15,10 +22,10 @@ function setup({ selection = '', activeElement = null, clipboardAvailable = true
     }
   } : undefined;
   vm.runInNewContext(script, {
-    URL, navigator: { clipboard }, getSelection: () => selection,
+    URL: CountingURL, navigator: { clipboard }, getSelection: () => selection,
     document: { activeElement, addEventListener: (type, callback) => { listeners[type] = callback; } }
   });
-  return { clipboard, writes, copy(text = '') {
+  return { clipboard, writes, getUrlParseCount: () => urlParseCount, copy(text = '') {
     let output = text;
     let prevented = false;
     listeners.copy({
@@ -63,4 +70,24 @@ test('cleans explicit copy data and leaves unrelated copy behavior untouched', (
   const page = setup();
   assert.equal(page.copy('https://x.com/alice/status/123?a=abc').output, 'https://x.com/alice/status/123');
   assert.deepEqual(page.copy('ordinary text'), { output: 'ordinary text', prevented: false });
+});
+
+test('cleans pro.x.com, pro.twitter.com, and uppercase X post links', async () => {
+  const { clipboard, writes } = setup();
+  await clipboard.writeText('https://pro.x.com/alice/status/123?s=20 https://pro.twitter.com/bob/status/456?t=xyz HTTPS://X.COM/carol/status/789?utm_source=x');
+  assert.equal(writes[0], 'https://pro.x.com/alice/status/123 https://pro.twitter.com/bob/status/456 https://x.com/carol/status/789');
+});
+
+test('bails out without URL parsing for non-matching text and parses each candidate at most once', async () => {
+  const page = setup();
+  await page.clipboard.writeText('plain text without links');
+  await page.clipboard.writeText('https://x.com/alice/status/123');
+  await page.clipboard.writeText('https://example.com/page?s=20');
+  assert.equal(page.getUrlParseCount(), 0);
+
+  await page.clipboard.writeText('https://x.com/alice/status/123?s=20&lang=ar');
+  assert.equal(page.getUrlParseCount(), 1);
+
+  await page.clipboard.writeText('https://x.com/alice/status/123?lang=ar');
+  assert.equal(page.getUrlParseCount(), 2);
 });

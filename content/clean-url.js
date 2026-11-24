@@ -1,19 +1,30 @@
 // Runs in the page's MAIN world so X's clipboard writes can be cleaned in place.
 (() => {
+  const URL_PATTERN = /https?:\/\/[^\s<>"']+/gi;
+  const FAST_HOST_HINT = /(?:x|twitter)\.com/i;
+  const SUPPORTED_HOST = /^(?:www\.|mobile\.|pro\.)?(?:x\.com|twitter\.com)$/i;
+  const SUPPORTED_POST_PATH = /^\/(?:[A-Za-z0-9_]+\/status|i\/web\/status)\/\d+(?:\/|$)/;
+  const TRACKING_PARAMS = new Set(['a', 's', 't', 'ref_src', 'ref_url']);
+  const UTM_PARAM = /^utm_/i;
+  const TEXT_INPUT_TAGS = /^(TEXTAREA|INPUT)$/;
+
   const cleanText = (text) => {
-    if (typeof text !== 'string') return text;
-    return text.replace(/https?:\/\/[^\s<>"']+/gi, (candidate) => {
+    if (typeof text !== 'string' || !text.includes('?') || !FAST_HOST_HINT.test(text)) return text;
+    return text.replace(URL_PATTERN, (candidate) => {
+      if (!candidate.includes('?')) return candidate;
       try {
         const url = new URL(candidate);
-        if (!/^(?:www\.|mobile\.)?(?:x\.com|twitter\.com)$/i.test(url.hostname) ||
-            !/^\/(?:[A-Za-z0-9_]+\/status|i\/web\/status)\/\d+(?:\/|$)/.test(url.pathname)) return candidate;
-        for (const key of [...url.searchParams.keys()]) {
-          if (['a', 's', 't', 'ref_src', 'ref_url'].includes(key.toLowerCase()) || /^utm_/i.test(key)) {
-            url.searchParams.delete(key);
+        if (!SUPPORTED_HOST.test(url.hostname) || !SUPPORTED_POST_PATH.test(url.pathname)) return candidate;
+        let toDelete = null;
+        for (const key of url.searchParams.keys()) {
+          if (TRACKING_PARAMS.has(key.toLowerCase()) || UTM_PARAM.test(key)) {
+            if (!toDelete) toDelete = [];
+            toDelete.push(key);
           }
         }
-        // Preserve the exact original text when there is nothing to remove.
-        return url.search === new URL(candidate).search ? candidate : url.href;
+        if (!toDelete) return candidate;
+        for (const key of toDelete) url.searchParams.delete(key);
+        return url.href;
       } catch {
         return candidate;
       }
@@ -33,7 +44,7 @@
     if (!event.clipboardData) return;
     const target = document.activeElement;
     const text = event.clipboardData.getData('text/plain') || (
-      target && /^(TEXTAREA|INPUT)$/.test(target.tagName)
+      target && TEXT_INPUT_TAGS.test(target.tagName)
         ? target.value.slice(target.selectionStart ?? 0, target.selectionEnd ?? target.value.length)
         : globalThis.getSelection()?.toString()
     );
