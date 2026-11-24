@@ -7,8 +7,10 @@ const contentScript = await readFile(new URL('../content/content.js', import.met
 const contentStyles = await readFile(new URL('../content/content.css', import.meta.url), 'utf8');
 
 class FakeElement {
-  constructor(tagName, notifyMutation) {
+  constructor(tagName, notifyMutation, rootRef, counters, namespaceURI = null) {
     this.tagName = tagName.toUpperCase();
+    this.nodeType = 1;
+    this.namespaceURI = namespaceURI;
     this.children = [];
     this.parentElement = null;
     this.dataset = {};
@@ -16,9 +18,40 @@ class FakeElement {
     this.style = {};
     this.className = '';
     this.textContent = '';
-    this.innerHTML = '';
+    this._innerHTML = '';
     this.notifyMutation = notifyMutation;
+    this.rootRef = rootRef;
+    this.counters = counters;
     this.listeners = new Map();
+    this.classList = {
+      contains: (className) => this.className.split(/\s+/).includes(className)
+    };
+  }
+
+  get id() {
+    return this.attributes.id ?? '';
+  }
+
+  set id(value) {
+    this.attributes.id = String(value);
+  }
+
+  get isConnected() {
+    let current = this;
+    while (current) {
+      if (current === this.rootRef.body) return true;
+      current = current.parentElement;
+    }
+    return false;
+  }
+
+  get innerHTML() {
+    return this._innerHTML;
+  }
+
+  set innerHTML(value) {
+    this.counters.innerHTMLWrites += 1;
+    this._innerHTML = String(value);
   }
 
   setAttribute(name, value) {
@@ -30,24 +63,71 @@ class FakeElement {
     return this.attributes[name] ?? null;
   }
 
-  append(child) {
-    child.parentElement = this;
-    this.children.push(child);
-    this.notifyMutation(child, this);
+  _detachChild(child) {
+    if (!child.parentElement) return;
+    const oldParent = child.parentElement;
+    const idx = oldParent.children.indexOf(child);
+    if (idx >= 0) oldParent.children.splice(idx, 1);
+    child.parentElement = null;
+  }
+
+  append(...nodes) {
+    for (const child of nodes) {
+      this._detachChild(child);
+      child.parentElement = this;
+      this.children.push(child);
+      this.notifyMutation({ addedNodes: [child], removedNodes: [], target: this });
+    }
+  }
+
+  appendChild(child) {
+    this.append(child);
+    return child;
   }
 
   insertBefore(child, reference) {
+    this._detachChild(child);
     child.parentElement = this;
     const index = this.children.indexOf(reference);
     this.children.splice(index < 0 ? this.children.length : index, 0, child);
-    this.notifyMutation(child, this);
+    this.notifyMutation({ addedNodes: [child], removedNodes: [], target: this });
+    return child;
+  }
+
+  replaceChildren(...nodes) {
+    const removed = this.children.splice(0);
+    for (const child of removed) child.parentElement = null;
+    for (const child of nodes) {
+      this._detachChild(child);
+      child.parentElement = this;
+      this.children.push(child);
+    }
+    this.notifyMutation({ addedNodes: nodes, removedNodes: removed, target: this });
   }
 
   remove() {
     if (!this.parentElement) return;
-    const index = this.parentElement.children.indexOf(this);
-    if (index >= 0) this.parentElement.children.splice(index, 1);
+    const parent = this.parentElement;
+    const index = parent.children.indexOf(this);
+    if (index >= 0) parent.children.splice(index, 1);
     this.parentElement = null;
+    this.notifyMutation({ addedNodes: [], removedNodes: [this], target: parent });
+  }
+
+  cloneNode(deep = false) {
+    const copy = new FakeElement(this.tagName, this.notifyMutation, this.rootRef, this.counters, this.namespaceURI);
+    copy.attributes = { ...this.attributes };
+    copy.className = this.className;
+    copy.dataset = { ...this.dataset };
+    copy.textContent = this.textContent;
+    if (deep) {
+      for (const child of this.children) {
+        const childCopy = child.cloneNode(true);
+        childCopy.parentElement = copy;
+        copy.children.push(childCopy);
+      }
+    }
+    return copy;
   }
 
   addEventListener(type, listener) {
@@ -66,6 +146,7 @@ class FakeElement {
   }
 
   closest(selector) {
+    if (selector === '.hajb-action-btn') this.counters.ownButtonClosestCalls += 1;
     let current = this;
     while (current) {
       if (matches(current, selector)) return current;
@@ -79,6 +160,7 @@ class FakeElement {
   }
 
   querySelector(selector) {
+    if (selector === '[data-testid="User-Name"]') this.counters.userNameQueries += 1;
     return this.querySelectorAll(selector)[0] ?? null;
   }
 
@@ -96,10 +178,11 @@ class FakeElement {
 }
 
 function descendants(element) {
-  return element.children.flatMap((child) => [child, ...descendants(child)]);
+  return element.children.flatMap((child) => (child.nodeType === 1 ? [child, ...descendants(child)] : []));
 }
 
 function matches(element, selector) {
+  if (element.nodeType !== 1) return false;
   if (selector.startsWith('.')) return element.className.split(/\s+/).includes(selector.slice(1));
   const testIdMatch = selector.match(/^\[data-testid="([^"]+)"\]$/);
   if (testIdMatch) return element.getAttribute('data-testid') === testIdMatch[1];
@@ -107,8 +190,7 @@ function matches(element, selector) {
   if (roleMatch) return element.getAttribute('role') === roleMatch[1];
   if (selector === 'a[role="link"]') return element.tagName === 'A' && element.getAttribute('role') === 'link';
   if (selector.startsWith('article[data-testid="tweet"]')) {
-    const isTweet = element.tagName === 'ARTICLE' && element.getAttribute('data-testid') === 'tweet';
-    return isTweet;
+    return element.tagName === 'ARTICLE' && element.getAttribute('data-testid') === 'tweet';
   }
   return false;
 }
@@ -116,18 +198,52 @@ function matches(element, selector) {
 function createPage(actionType = 'block', {
   deferStorageRead = false,
   deferTimers = false,
+  hidden = false,
   menuItemTexts = [],
   storedSettings = {},
-  tweetCount = 1
+  storageReturnsUndefined = false,
+  tweetCount = 1,
+  withReactRoot = false,
+  withLayers = false
 } = {}) {
   const mutationObservers = [];
-  const notifyMutation = (node, target) => {
+  const counters = {
+    i18nCalls: 0,
+    innerHTMLWrites: 0,
+    ownButtonClosestCalls: 0,
+    userNameQueries: 0,
+    consoleLogs: 0
+  };
+  const rootRef = { body: null };
+  const notifyMutation = (record) => {
     for (const observer of mutationObservers) {
-      if (observer.active) observer.callback([{ addedNodes: [node], target }]);
+      if (observer.active && observer.target?.contains(record.target)) {
+        observer.callback([record]);
+      }
     }
   };
-  const createElement = (tagName) => new FakeElement(tagName, notifyMutation);
+  const createElement = (tagName) => new FakeElement(tagName, notifyMutation, rootRef, counters);
+  const createElementNS = (ns, tagName) => new FakeElement(tagName, notifyMutation, rootRef, counters, ns);
   const body = createElement('body');
+  rootRef.body = body;
+
+  const byId = new Map();
+  let tweetContainer = body;
+  if (withReactRoot) {
+    const reactRoot = createElement('div');
+    reactRoot.setAttribute('id', 'react-root');
+    body.append(reactRoot);
+    byId.set('react-root', reactRoot);
+    tweetContainer = reactRoot;
+  }
+  let layers = null;
+  if (withLayers) {
+    layers = createElement('div');
+    layers.setAttribute('id', 'layers');
+    (withReactRoot ? byId.get('react-root') : body).append(layers);
+    byId.set('layers', layers);
+  }
+
   let primaryCaret = null;
   for (let index = 0; index < tweetCount; index += 1) {
     const tweet = createElement('article');
@@ -141,16 +257,16 @@ function createPage(actionType = 'block', {
     profileLink.textContent = index === 0 ? '@alice' : `@user${index + 1}`;
     actions.className = 'actions';
     caret.setAttribute('data-testid', 'caret');
-    body.append(tweet);
+    tweetContainer.append(tweet);
     tweet.append(userName);
     userName.append(profileLink);
     tweet.append(actions);
     actions.append(caret);
     primaryCaret ??= caret;
   }
+
   const menu = createElement('div');
   let clickedMenuText = null;
-
   menu.setAttribute('data-testid', 'Dropdown');
   for (const text of menuItemTexts) {
     const item = createElement('button');
@@ -159,18 +275,23 @@ function createPage(actionType = 'block', {
     item.onClick = () => { clickedMenuText = text; };
     menu.append(item);
   }
-  primaryCaret.onClick = () => {
-    if (!menu.parentElement) body.append(menu);
-  };
+  if (primaryCaret) {
+    primaryCaret.onClick = () => {
+      const menuHost = layers ?? body;
+      if (!menu.parentElement) menuHost.append(menu);
+    };
+  }
 
   const changeListeners = [];
   const runtimeMessages = [];
   let pendingStorageRead = null;
   const document = {
     body,
-    hidden: false,
+    hidden,
     readyState: 'complete',
     createElement,
+    createElementNS,
+    getElementById: (id) => byId.get(id) ?? null,
     addEventListener: (type, listener) => body.addEventListener(type, listener),
     querySelector: (selector) => body.querySelector(selector),
     querySelectorAll: (selector) => body.querySelectorAll(selector)
@@ -178,6 +299,7 @@ function createPage(actionType = 'block', {
   const chrome = {
     i18n: {
       getMessage(key) {
+        counters.i18nCalls += 1;
         return {
           extName: 'One Click Block Twitter',
           blockButtonLabel: 'Block account with one tap',
@@ -189,7 +311,9 @@ function createPage(actionType = 'block', {
     storage: {
       local: {
         get(defaults, callback) {
-          const complete = () => callback({ ...defaults, ...storedSettings, actionType });
+          const complete = () => callback(
+            storageReturnsUndefined ? undefined : { ...defaults, ...storedSettings, actionType }
+          );
           if (deferStorageRead) pendingStorageRead = complete;
           else complete();
         }
@@ -210,10 +334,17 @@ function createPage(actionType = 'block', {
   class MutationObserver {
     constructor(callback) {
       this.callback = callback;
+      this.active = false;
+      this.target = null;
       mutationObservers.push(this);
     }
-    observe() { this.active = true; }
-    disconnect() { this.active = false; }
+    observe(target) {
+      this.active = true;
+      this.target = target;
+    }
+    disconnect() {
+      this.active = false;
+    }
   }
   let nextTimerId = 1;
   let currentTime = 0;
@@ -242,7 +373,10 @@ function createPage(actionType = 'block', {
   vm.runInNewContext(contentScript, {
     chrome,
     clearTimeout,
-    console: { log() {}, error() {} },
+    console: {
+      log() { counters.consoleLogs += 1; },
+      error() {}
+    },
     document,
     MutationObserver,
     setTimeout
@@ -250,16 +384,25 @@ function createPage(actionType = 'block', {
 
   return {
     document,
+    counters,
+    mutationObservers,
+    tweetContainer,
+    layers,
     activeObservers: () => mutationObservers.filter((observer) => observer.active).length,
     pendingTimerCount: () => timers.size,
-    setHidden(hidden) {
-      document.hidden = hidden;
+    setHidden(nextHidden) {
+      document.hidden = nextHidden;
       return body.dispatchEvent({ type: 'visibilitychange' });
     },
     advanceTime,
     completeStorageRead() {
       pendingStorageRead?.();
       pendingStorageRead = null;
+    },
+    dispatchRawMutations(records) {
+      for (const observer of mutationObservers) {
+        if (observer.active) observer.callback(records);
+      }
     },
     getClickedMenuText() {
       return clickedMenuText;
@@ -300,38 +443,291 @@ test('restores the action button when X replaces the tweet action bar', () => {
   assert.ok(tweet.querySelector('.hajb-action-btn'));
 });
 
-test('keeps the visible action and accessible label in sync with settings', () => {
-  const { document, emitStorageChange } = createPage('block');
-  const button = document.querySelector('.hajb-account-action-btn');
+test('builds icons via createElementNS without innerHTML and caches i18n labels', () => {
+  const page = createPage('block', { tweetCount: 30 });
+  const button = page.document.querySelector('.hajb-account-action-btn');
 
+  assert.equal(page.counters.innerHTMLWrites, 0);
   assert.equal(button.tagName, 'BUTTON');
+  assert.equal(button.children[0].tagName, 'SVG');
+  assert.equal(button.children[0].namespaceURI, 'http://www.w3.org/2000/svg');
+  assert.equal(button.children[0].children[0].tagName, 'PATH');
   assert.equal(button.getAttribute('aria-label'), 'Block account with one tap');
-  const blockIcon = button.innerHTML;
+  assert.equal(page.counters.i18nCalls, 2);
 
-  emitStorageChange('mute');
+  const blockPath = button.children[0].children[0].getAttribute('d');
+  page.emitStorageChange('mute');
 
+  assert.equal(page.counters.innerHTMLWrites, 0);
   assert.equal(button.getAttribute('aria-label'), 'Mute account with one tap');
-  assert.notEqual(button.innerHTML, blockIcon);
+  assert.notEqual(button.children[0].children[0].getAttribute('d'), blockPath);
+  assert.equal(page.counters.i18nCalls, 3);
 });
 
-test('updates an already injected button when the initial storage read finishes late', () => {
-  const { document, completeStorageRead } = createPage('mute', { deferStorageRead: true });
-  const button = document.querySelector('.hajb-account-action-btn');
-  assert.equal(button.getAttribute('aria-label'), 'Block account with one tap');
+test('waits for initial storage read before starting observer or injecting buttons', () => {
+  const disabledPage = createPage('block', {
+    deferStorageRead: true,
+    storedSettings: { hajbEnabled: false }
+  });
+  assert.equal(disabledPage.activeObservers(), 0);
+  assert.equal(disabledPage.document.querySelector('.hajb-action-btn'), null);
 
-  completeStorageRead();
+  disabledPage.completeStorageRead();
+  assert.equal(disabledPage.activeObservers(), 0);
+  assert.equal(disabledPage.document.querySelector('.hajb-action-btn'), null);
 
+  const mutePage = createPage('mute', { deferStorageRead: true });
+  assert.equal(mutePage.activeObservers(), 0);
+  assert.equal(mutePage.document.querySelector('.hajb-account-action-btn'), null);
+
+  mutePage.completeStorageRead();
+  const button = mutePage.document.querySelector('.hajb-account-action-btn');
   assert.equal(button.getAttribute('aria-label'), 'Mute account with one tap');
+  assert.equal(mutePage.counters.i18nCalls, 2);
 });
 
-test('restores the tweet inline styles when the X action menu cannot be opened', async () => {
-  const { document } = createPage();
-  const tweet = document.querySelector('article[data-testid="tweet"]');
-  const button = document.querySelector('.hajb-account-action-btn');
+test('falls back to default settings if initial storage read yields undefined', () => {
+  const page = createPage('block', { storageReturnsUndefined: true });
+  assert.equal(page.activeObservers(), 1);
+  assert.ok(page.document.querySelector('.hajb-account-action-btn'));
+  assert.ok(page.document.querySelector('.hajb-not-interested-btn'));
+});
+
+test('only injects enabled buttons and removes disabled buttons from the DOM', () => {
+  const accountDisabled = createPage('block', {
+    storedSettings: { accountActionEnabled: false, notInterestedEnabled: true }
+  });
+  assert.equal(accountDisabled.document.querySelector('.hajb-account-action-btn'), null);
+  assert.ok(accountDisabled.document.querySelector('.hajb-not-interested-btn'));
+
+  const page = createPage('block');
+  assert.ok(page.document.querySelector('.hajb-account-action-btn'));
+  assert.ok(page.document.querySelector('.hajb-not-interested-btn'));
+
+  page.emitSettingChange('accountActionEnabled', false);
+  assert.equal(page.document.querySelector('.hajb-account-action-btn'), null);
+  assert.ok(page.document.querySelector('.hajb-not-interested-btn'));
+
+  page.emitSettingChange('notInterestedEnabled', false);
+  assert.equal(page.document.querySelector('.hajb-not-interested-btn'), null);
+  assert.equal(page.activeObservers(), 0);
+
+  page.emitSettingChange('accountActionEnabled', true);
+  assert.equal(page.activeObservers(), 1);
+  assert.ok(page.document.querySelector('.hajb-account-action-btn'));
+  assert.equal(page.document.querySelector('.hajb-not-interested-btn'), null);
+
+  page.emitSettingChange('notInterestedEnabled', true);
+  const actions = page.document.querySelector('.actions');
+  assert.deepEqual(
+    actions.children.slice(0, 3),
+    [
+      page.document.querySelector('.hajb-account-action-btn'),
+      page.document.querySelector('.hajb-not-interested-btn'),
+      actions.querySelector('[data-testid="caret"]')
+    ]
+  );
+
+  page.emitSettingChange('hajbEnabled', false);
+  assert.equal(page.document.querySelector('.hajb-action-btn'), null);
+  assert.equal(page.activeObservers(), 0);
+});
+
+test('defers DOM updates when settings change in hidden tabs and reconciles on resume', async () => {
+  const page = createPage('block', { deferTimers: true });
+  page.flushTimers();
+
+  await page.setHidden(true);
+  let scansWhileHidden = 0;
+  const originalQsa = page.document.querySelectorAll;
+  page.document.querySelectorAll = (...args) => { scansWhileHidden += 1; return originalQsa(...args); };
+
+  page.emitSettingChange('accountActionEnabled', false);
+  page.emitStorageChange('mute');
+  page.emitSettingChange('accountActionEnabled', true);
+  assert.equal(scansWhileHidden, 0);
+
+  page.document.querySelectorAll = originalQsa;
+  await page.setHidden(false);
+  page.flushTimers();
+
+  const button = page.document.querySelector('.hajb-account-action-btn');
+  assert.equal(button.dataset.actionType, 'mute');
+  assert.equal(button.getAttribute('aria-label'), 'Mute account with one tap');
+
+  await page.setHidden(true);
+  page.emitSettingChange('hajbEnabled', false);
+  assert.ok(page.document.querySelector('.hajb-action-btn'), 'does not mutate DOM while hidden');
+
+  await page.setHidden(false);
+  assert.equal(page.document.querySelector('.hajb-action-btn'), null);
+  assert.equal(page.activeObservers(), 0);
+});
+
+test('scopes timeline observer to #react-root and skips leaf tags and own-button closest walks', () => {
+  const page = createPage('block', { deferTimers: true, withReactRoot: true });
+  page.flushTimers();
+
+  assert.equal(page.mutationObservers[0].target, page.document.getElementById('react-root'));
+  page.counters.ownButtonClosestCalls = 0;
+
+  let leafQueryScans = 0;
+  const span = page.document.createElement('span');
+  const innerSpan = page.document.createElement('span');
+  span.append(innerSpan);
+  span.querySelectorAll = () => { leafQueryScans += 1; return []; };
+  page.tweetContainer.append(span);
+
+  const outsidePortal = page.document.createElement('div');
+  page.document.body.append(outsidePortal);
+
+  assert.equal(leafQueryScans, 0);
+  assert.equal(page.counters.ownButtonClosestCalls, 0);
+  assert.equal(page.pendingTimerCount(), 0);
+});
+
+test('deduplicates repeated mutation targets within a single observer callback', () => {
+  const page = createPage('block', { deferTimers: true });
+  page.flushTimers();
+  const tweet = page.document.querySelector('article[data-testid="tweet"]');
+  const user = tweet.querySelector('[data-testid="User-Name"]');
+
+  let closestCount = 0;
+  const originalClosest = user.closest.bind(user);
+  user.closest = (selector) => { closestCount += 1; return originalClosest(selector); };
+
+  const child = page.document.createElement('span');
+  page.dispatchRawMutations(Array.from({ length: 20 }, () => ({
+    target: user,
+    addedNodes: [child],
+    removedNodes: []
+  })));
+
+  assert.equal(closestCount, 1);
+});
+
+test('evicts detached queued tweets immediately without consuming the 20-tweet injection budget', () => {
+  const page = createPage('block', { deferTimers: true, tweetCount: 0 });
+  page.flushTimers();
+
+  const detachedTweets = [];
+  for (let i = 0; i < 100; i += 1) {
+    const tweet = page.document.createElement('article');
+    tweet.setAttribute('data-testid', 'tweet');
+    const caret = page.document.createElement('button');
+    caret.setAttribute('data-testid', 'caret');
+    tweet.append(caret);
+    page.document.body.append(tweet);
+    detachedTweets.push(tweet);
+  }
+  for (const tweet of detachedTweets) tweet.remove();
+
+  for (let i = 0; i < 10; i += 1) {
+    const tweet = page.document.createElement('article');
+    tweet.setAttribute('data-testid', 'tweet');
+    const caret = page.document.createElement('button');
+    caret.setAttribute('data-testid', 'caret');
+    tweet.append(caret);
+    page.document.body.append(tweet);
+  }
+
+  page.advanceTime(32);
+  assert.equal(page.document.querySelectorAll('.hajb-action-btn').length, 20);
+  assert.equal(page.pendingTimerCount(), 0);
+});
+
+test('handles caret-less tweets without throwing and scopes button lookup to caret parent', () => {
+  const page = createPage('block', { tweetCount: 0 });
+  const caretless = page.document.createElement('article');
+  caretless.setAttribute('data-testid', 'tweet');
+  page.document.body.append(caretless);
+  assert.equal(caretless.querySelector('.hajb-action-btn'), null);
+
+  const tweet = page.document.createElement('article');
+  tweet.setAttribute('data-testid', 'tweet');
+  const quoted = page.document.createElement('div');
+  const strayBtn = page.document.createElement('button');
+  strayBtn.className = 'hajb-action-btn hajb-account-action-btn';
+  quoted.append(strayBtn);
+  const actions = page.document.createElement('div');
+  const caret = page.document.createElement('button');
+  caret.setAttribute('data-testid', 'caret');
+  actions.append(caret);
+  tweet.append(quoted);
+  tweet.append(actions);
+  page.document.body.append(tweet);
+
+  assert.equal(actions.children.filter((c) => c.classList.contains('hajb-account-action-btn')).length, 1);
+  assert.equal(actions.children.filter((c) => c.classList.contains('hajb-not-interested-btn')).length, 1);
+});
+
+test('scopes menu waitForElement to #layers, prevents concurrent action collisions, and skips logging or background messaging', async () => {
+  const page = createPage('mute', {
+    deferTimers: true,
+    tweetCount: 2,
+    withReactRoot: true,
+    withLayers: true
+  });
+  page.flushTimers();
+  const tweets = page.document.querySelectorAll('article[data-testid="tweet"]');
+  const buttons = page.document.querySelectorAll('.hajb-account-action-btn');
+  tweets[0].querySelector('[data-testid="caret"]').onClick = () => {};
+  tweets[1].querySelector('[data-testid="caret"]').onClick = () => {};
+
+  const firstClick = page.document.body.dispatchEvent({
+    type: 'click',
+    target: buttons[0],
+    preventDefault() {},
+    stopPropagation() {}
+  });
+
+  const menuObserver = page.mutationObservers[1];
+  assert.equal(menuObserver.target, page.layers);
+
+  // Overlapping click on second tweet must be ignored while first action is inFlight
+  await page.document.body.dispatchEvent({
+    type: 'click',
+    target: buttons[1],
+    preventDefault() {},
+    stopPropagation() {}
+  });
+  assert.equal(tweets[1].style.opacity, undefined);
+
+  const menu = page.document.createElement('div');
+  menu.setAttribute('data-testid', 'Dropdown');
+  const item = page.document.createElement('button');
+  item.setAttribute('role', 'menuitem');
+  item.textContent = 'Mute @alice';
+  menu.append(item);
+  page.layers.append(menu);
+
+  await firstClick;
+  assert.equal(tweets[0].style.display, 'none');
+  assert.equal(page.activeObservers(), 1);
+  assert.equal(page.pendingTimerCount(), 0);
+  assert.equal(page.getRuntimeMessages().length, 0);
+  assert.equal(page.counters.consoleLogs, 0);
+  assert.equal(page.counters.userNameQueries, 0);
+
+  // Lock must be released after completion so second tweet can now be acted upon
+  const secondClick = page.document.body.dispatchEvent({
+    type: 'click',
+    target: buttons[1],
+    preventDefault() {},
+    stopPropagation() {}
+  });
+  await secondClick;
+  assert.equal(tweets[1].style.display, 'none');
+});
+
+test('restores the tweet inline styles and releases lock when the X action menu cannot be opened', async () => {
+  const page = createPage('block');
+  const tweet = page.document.querySelector('article[data-testid="tweet"]');
+  const button = page.document.querySelector('.hajb-account-action-btn');
   tweet.style.opacity = '0.75';
   tweet.style.pointerEvents = 'inherit';
 
-  await document.body.dispatchEvent({
+  await page.document.body.dispatchEvent({
     type: 'click',
     target: button,
     preventDefault() {},
@@ -340,6 +736,17 @@ test('restores the tweet inline styles when the X action menu cannot be opened',
 
   assert.equal(tweet.style.opacity, '0.75');
   assert.equal(tweet.style.pointerEvents, 'inherit');
+
+  // Verify lock was released after failure by triggering a second attempt
+  let caretClicked = 0;
+  tweet.querySelector('[data-testid="caret"]').onClick = () => { caretClicked += 1; };
+  await page.document.body.dispatchEvent({
+    type: 'click',
+    target: button,
+    preventDefault() {},
+    stopPropagation() {}
+  });
+  assert.equal(caretClicked, 1);
 });
 
 test('does not select the Arabic undo action when muting an account', async () => {
@@ -357,60 +764,7 @@ test('does not select the Arabic undo action when muting an account', async () =
   assert.equal(getClickedMenuText(), 'كتم @alice');
 });
 
-test('injects a fixed not-interested button beside the configured account action', () => {
-  const { document, emitStorageChange } = createPage('block');
-  const actions = document.querySelector('.actions');
-  const accountButton = document.querySelector('.hajb-account-action-btn');
-  const notInterestedButton = document.querySelector('.hajb-not-interested-btn');
-
-  assert.deepEqual(actions.children.slice(0, 3), [accountButton, notInterestedButton, actions.querySelector('[data-testid="caret"]')]);
-  assert.equal(notInterestedButton.getAttribute('aria-label'), 'Not interested in this post');
-  assert.equal(notInterestedButton.dataset.actionType, 'notInterested');
-
-  emitStorageChange('mute');
-
-  assert.equal(accountButton.dataset.actionType, 'mute');
-  assert.equal(notInterestedButton.dataset.actionType, 'notInterested');
-});
-
-test('respects master and per-button visibility settings from the dashboard', () => {
-  const accountDisabled = createPage('block', {
-    storedSettings: { accountActionEnabled: false, notInterestedEnabled: true }
-  });
-  assert.equal(accountDisabled.document.querySelector('.hajb-account-action-btn').hidden, true);
-  assert.equal(accountDisabled.document.querySelector('.hajb-not-interested-btn').hidden, false);
-
-  const masterDisabled = createPage('block', {
-    storedSettings: { hajbEnabled: false }
-  });
-  assert.equal(masterDisabled.document.querySelector('.hajb-account-action-btn'), null);
-  assert.equal(masterDisabled.document.querySelector('.hajb-not-interested-btn'), null);
-});
-
-test('updates button visibility immediately when dashboard switches change', () => {
-  const { document, emitSettingChange } = createPage();
-  const accountButton = document.querySelector('.hajb-account-action-btn');
-  const notInterestedButton = document.querySelector('.hajb-not-interested-btn');
-
-  emitSettingChange('accountActionEnabled', false);
-  assert.equal(accountButton.hidden, true);
-  assert.equal(notInterestedButton.hidden, false);
-
-  emitSettingChange('notInterestedEnabled', false);
-  assert.equal(notInterestedButton.hidden, true);
-
-  emitSettingChange('accountActionEnabled', true);
-  assert.equal(accountButton.hidden, false);
-});
-
-test('hidden action buttons override their flex display rule', () => {
-  assert.match(
-    contentStyles,
-    /\.hajb-action-btn\[hidden\]\s*\{[^}]*display:\s*none\s*!important;/s
-  );
-});
-
-test('selects not interested in this post, records it, and avoids the similarly named Topic action', async () => {
+test('selects not interested in this post without background messaging and avoids the Topic action', async () => {
   const { document, getClickedMenuText, getRuntimeMessages } = createPage('block', {
     menuItemTexts: ['Not interested in this Topic', 'Not interested in this post']
   });
@@ -425,10 +779,7 @@ test('selects not interested in this post, records it, and avoids the similarly 
 
   assert.equal(getClickedMenuText(), 'Not interested in this post');
   assert.equal(tweet.style.display, 'none');
-  assert.equal(JSON.stringify(getRuntimeMessages()), JSON.stringify([{
-    type: 'HAJB_RECORD_ACTION',
-    actionType: 'notInterested'
-  }]));
+  assert.equal(getRuntimeMessages().length, 0);
 });
 
 test('selects the Arabic not-interested post action without selecting the Topic action', async () => {
@@ -480,12 +831,12 @@ test('injects actions while X keeps mutating the timeline', () => {
   assert.ok(tweet.querySelector('.hajb-account-action-btn'));
 });
 
-test('counter writes do not redraw or scan timeline controls', () => {
+test('unrelated storage events do not redraw or scan timeline controls', () => {
   const page = createPage();
   let scans = 0;
   const original = page.document.querySelectorAll;
-  page.document.querySelectorAll = (...args) => { scans++; return original(...args); };
-  for (let i = 0; i < 100; i++) page.emitSettingChange('actionStats', { block: i });
+  page.document.querySelectorAll = (...args) => { scans += 1; return original(...args); };
+  for (let i = 0; i < 100; i += 1) page.emitSettingChange('unrelatedKey', { count: i });
   assert.equal(scans, 0);
 });
 
@@ -496,8 +847,8 @@ test('ordinary tweet updates reuse intact controls without querying the tweet ag
   const user = tweet.querySelector('[data-testid="User-Name"]');
   let scans = 0;
   const original = tweet.querySelector;
-  tweet.querySelector = (...args) => { scans++; return original.call(tweet, ...args); };
-  for (let i = 0; i < 100; i++) {
+  tweet.querySelector = (...args) => { scans += 1; return original.call(tweet, ...args); };
+  for (let i = 0; i < 100; i += 1) {
     user.append(page.document.createElement('span'));
     page.advanceTime(100);
   }
@@ -540,30 +891,10 @@ test('large timelines yield between batches and still receive exactly two contro
   assert.equal(page.pendingTimerCount(), 0);
 });
 
-test('a resolved menu wait releases its observer and timeout immediately', async () => {
-  const page = createPage('mute', { deferTimers: true });
-  page.flushTimers();
-  page.document.querySelector('[data-testid="caret"]').onClick = () => {};
-  const action = page.document.body.dispatchEvent({
-    type: 'click', target: page.document.querySelector('.hajb-account-action-btn'),
-    preventDefault() {}, stopPropagation() {}
-  });
-  const menu = page.document.createElement('div');
-  menu.setAttribute('data-testid', 'Dropdown');
-  const item = page.document.createElement('button');
-  item.setAttribute('role', 'menuitem');
-  item.textContent = 'Mute @alice';
-  menu.append(item);
-  page.document.body.append(menu);
-  await action;
-  assert.equal(page.activeObservers(), 1);
-  assert.equal(page.pendingTimerCount(), 0);
-});
-
 test('a burst larger than the pending queue is fully recovered without duplicate controls', () => {
   const page = createPage('block', { deferTimers: true });
   page.flushTimers();
-  for (let i = 0; i < 600; i++) {
+  for (let i = 0; i < 600; i += 1) {
     const tweet = page.document.createElement('article');
     tweet.setAttribute('data-testid', 'tweet');
     const caret = page.document.createElement('button');
@@ -588,4 +919,9 @@ test('replacing the entire action bar restores controls without retaining the ol
   tweet.append(bar);
   page.flushTimers();
   assert.equal(tweet.querySelectorAll('.hajb-action-btn').length, 2);
+});
+
+test('action buttons enable CSS containment and omit unused hidden override', () => {
+  assert.match(contentStyles, /\.hajb-action-btn\s*\{[^}]*contain:\s*layout style paint;/s);
+  assert.doesNotMatch(contentStyles, /\.hajb-action-btn\[hidden\]/);
 });

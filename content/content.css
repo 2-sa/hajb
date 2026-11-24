@@ -13,10 +13,7 @@
   border: 0;
   background: transparent;
   font: inherit;
-}
-
-.hajb-action-btn[hidden] {
-  display: none !important;
+  contain: layout style paint;
 }
 
 .hajb-action-btn[data-action-type="block"]:hover,
